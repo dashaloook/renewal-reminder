@@ -1,0 +1,11 @@
+# Secrets — never commit real keys
+.env
+.env.local
+.env.*.local
+
+# Local / tool folders
+.vercel/
+__pycache__/
+*.pyc
+.DS_Store
+.claude/
