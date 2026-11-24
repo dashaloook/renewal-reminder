@@ -307,6 +307,14 @@ function App() {
 const SIDE_KEY = 'rr-sidebar-collapsed';
 function Shell({ ctx, page, children }) {
   const [menu, setMenu] = useState(false);
+  // Close the profile menu on a click/tap anywhere outside it, or with Esc (focus goes back to the button).
+  useEffect(() => {
+    if (!menu) return;
+    const outside = (e) => { if (!e.target.closest('.profile')) setMenu(false); };
+    const esc = (e) => { if (e.key === 'Escape') { setMenu(false); const b = document.querySelector('.profile-btn'); if (b) b.focus(); } };
+    document.addEventListener('pointerdown', outside); document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', esc); };
+  }, [menu]);
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(SIDE_KEY) === '1'; } catch (e) { return false; } });
   const toggleSide = () => setCollapsed((c) => { try { localStorage.setItem(SIDE_KEY, c ? '0' : '1'); } catch (e) { /* per-viewer convenience only */ } setMenu(false); return !c; });
   const active = page === 'dashboard' ? 'dashboard' : 'reminders';
