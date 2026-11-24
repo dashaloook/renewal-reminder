@@ -19,7 +19,8 @@ Security model
   never an address stored in the database (users could edit that).
 - Push notifications are signed with VAPID_PRIVATE_KEY (Vercel Secret); the
   matching public key is in push.js. Subscriptions live in each user's own document.
-- `?dry=1` reports what would be sent without sending anything.
+- `?dry=1` reports what would be sent without sending anything; `?only=push` or
+  `?only=email` runs just one kind (for testing).
 """
 
 from http.server import BaseHTTPRequestHandler
@@ -146,7 +147,7 @@ def send_push(sub, payload, private_key, subject):
 
 # ---------- the job ----------
 
-def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=None, push_fn=None):
+def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=None, push_fn=None, only=None):
     """Pure job logic: returns (status, summary). Injectable for tests."""
     env = os.environ if env is None else env
     channel = mail_channel(env)
@@ -167,8 +168,8 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
 
     users = [u if len(u) == 3 else (u[0], u[1], []) for u in users]
     due = [(uid, r, d, n, subs) for uid, rs, subs in users for r in rs if isinstance(r, dict) for ok, d, n in [due_today(r, today)] if ok]
-    due_mail = [x for x in due if x[1].get("channel") == "email"]
-    due_push = [x for x in due if x[1].get("channel") != "email"]
+    due_mail = [x for x in due if x[1].get("channel") == "email"] if only != "push" else []
+    due_push = [x for x in due if x[1].get("channel") != "email"] if only != "email" else []
     emails = (lookup_fn or (lambda ids: lookup_emails(sa, token, ids)))(sorted({u for u, *_ in due_mail})) if due_mail else {}
     send, secret, sender, service = channel
     send = send_fn or send
@@ -234,7 +235,7 @@ class handler(BaseHTTPRequestHandler):
             status, out = 401, {"error": "Only the scheduled job can run this."}
         else:
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            status, out = run(dry=q.get("dry") == ["1"])
+            status, out = run(dry=q.get("dry") == ["1"], only=(q.get("only") or [None])[0])
         body = json.dumps(out).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
