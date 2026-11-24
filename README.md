@@ -51,6 +51,18 @@ Browser ──POST /api/send_reminder──▶ our function ──(RESEND_API_KE
                                        takes the email from it, builds email
 ```
 
+## Automatic reminder emails
+
+Every morning at 08:00 Kyiv time (06:00 UTC) **Vercel Cron** runs `api/daily_reminders.py` (schedule in `vercel.json`). It:
+
+1. reads every user's reminders from Firestore,
+2. picks the ones set to **Remind me … by Email** that are due today: exactly *N days before* the charge date (as chosen in the form), or a postponed reminder whose follow-up date is today; cancelled ones are skipped, monthly/yearly dates roll forward like in the app,
+3. sends each one to that user's **own confirmed address** from Firebase Authentication, through Resend.
+
+Security: only Vercel can start the job (it sends `CRON_SECRET`; other requests get 401). The job reads the database with a Firebase service-account key stored only in Vercel (`FIREBASE_SERVICE_ACCOUNT`, Secret), never in the code, GitHub or the browser. It only reads, never writes, and never takes the recipient from the database (users could edit that). Errors are logged without email addresses.
+
+Limit: on Resend's free plan the emails only reach the Resend account owner until a domain is verified.
+
 ## Run locally
 
 1. Copy `.env.example` to `.env.local` and fill in `RESEND_API_KEY`.
