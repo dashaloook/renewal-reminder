@@ -86,7 +86,10 @@ def build_email(r):
     when = _when(r["daysLeft"])
     per = CYCLES[r["cycle"]]
     price = f"€{r['amount']:.2f}" + (f" / {per}" if per and r["amount"] else "")
-    subject = f"{r['name']} renews {when or 'on ' + r['date']}"[:120]
+    # The send time makes every subject unique, so Gmail shows each email as its
+    # own message instead of folding it into an older conversation.
+    sent = time.strftime("%d %b, %H:%M:%S UTC", time.gmtime())
+    subject = f"{r['name']} renews {when or 'on ' + r['date']} · {sent}"[:120]
     text = (f"{r['name']} renews {when + ' ' if when else ''}on {r['date']}."
             + (f" Amount: {price}." if r["amount"] else "")
             + "\n\nKeep it, cancel it on the service's site, or decide later in Renewal Reminder."
