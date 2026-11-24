@@ -37,7 +37,7 @@ const P = {
   external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
   hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22"/><path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/>',
-  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', 'arrow-right': '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', 'arrow-right': '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>', mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
   alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
@@ -425,6 +425,12 @@ function Row({ r, ctx, isNew }) {
 // ---------- Drawer ----------
 function Drawer({ r, ctx, onClose }) {
   const ref = useOverlay(onClose); const n = R.daysUntil(r.date);
+  const [mail, setMail] = useState({ s: 'idle', msg: '' });
+  const sendTest = async () => {
+    setMail({ s: 'sending', msg: '' });
+    try { await window.RRApi.sendReminder(r); setMail({ s: 'sent', msg: 'Sent. Check your inbox (and spam).' }); ctx.showToast(`Test email sent for ${r.name}`, 'It went to the address set on the server.', null); }
+    catch (e) { setMail({ s: 'error', msg: e.message }); }
+  };
   return html`<div class="scrim" onClick=${onClose}></div>
   <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-h" ref=${ref}>
     <div class="row gap12" style=${{ padding: 24, borderBottom: '1px solid var(--muted)' }}><${Logo} r=${r} size="lg" /><div class="grow"><h2 class="h2" id="dr-h">${r.name}</h2><span class="c2">${cat(r.category).one} · ${cyc(r.cycle).label}</span></div><button class="icon-btn" aria-label="Close details" onClick=${onClose} data-autofocus><${Icon} n="x" c="s" /></button></div>
@@ -442,6 +448,10 @@ function Drawer({ r, ctx, onClose }) {
         <div><dt>${r.category === 'document' ? 'Expires' : 'Next charge'}</dt><dd>${fmt(r.date, { day: 'numeric', month: 'long', year: 'numeric' })} (${rel(n).toLowerCase()})</dd></div>
         <div><dt>Remind me</dt><dd>${remindTxt(r.remind)} · ${r.channel === 'email' ? 'Email' : 'Browser'}</dd></div>
         <div><dt>Note</dt><dd>${r.note || '—'}</dd></div></dl>
+      ${r.status !== 'cancelled' && html`<div class="col" style=${{ gap: 8 }}><b>Email reminder</b>
+        <span class="small c2">Send yourself the email you’d get before ${r.name} renews.</span>
+        <div><${Btn} v="secondary" sm icon="mail" loading=${mail.s === 'sending'} onClick=${sendTest}>${mail.s === 'sending' ? 'Sending…' : 'Send test email'}<//></div>
+        <span aria-live="polite">${mail.s === 'sent' ? html`<span class="msg ok"><${Icon} n="circle-check" c="xs" />${mail.msg}</span>` : mail.s === 'error' ? html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${mail.msg}</span>` : ''}</span></div>`}
       <div class="col gap12"><b>History</b>${[...r.history].reverse().map((h) => html`<div class="row gap12"><span class="logo sm" style=${{ background: 'var(--subtle)', color: 'var(--text-2)' }}><${Icon} n=${{ created: 'plus', reminded: 'bell', postponed: 'hourglass', cancelled: 'x', kept: 'check', edited: 'pencil' }[h.type] || 'info'} c="xs" /></span><div><div>${h.text}</div><div class="small c3">${fmt(h.date)}</div></div></div>`)}</div>
     </div>
     <div class="row" style=${{ padding: 24, borderTop: '1px solid var(--muted)', justifyContent: 'space-between' }}>
