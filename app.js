@@ -662,7 +662,12 @@ function ChannelNote({ r, ctx, on }) {
     ? box('mail', 'ok', html`<b>Email reminder is set.</b> We’ll email <b>${R.USER.email}</b> on ${when}. If it isn’t in your inbox, check Spam and mark it “Not spam”.`)
     : box('info', 'warn', html`<b>Email reminders need a real account.</b> Log in with Google or your email account and we’ll email you on ${when}.`);
   if (ctx.state.notif) return box('bell', 'ok', html`<b>Browser notification is set.</b> This browser will show a notification on ${when}${R.CLOUD_ACCOUNT ? ', even if the app is closed' : ' while the app is open'}.`);
-  return box('bell-off', 'warn', html`<b>Notifications are off on this device.</b> Turn them on so we can remind you on ${when}. <button type="button" class="link" onClick=${ctx.enableNotifications}>Turn on notifications</button>`);
+  // Same look as the "Remind you…?" card on the form: clear question + a real button.
+  return html`<div class="card pad20 col gap12" style=${{ width: '100%', textAlign: 'left', boxShadow: 'var(--shadow-s, 0 1px 2px rgba(22,19,43,.06))' }}>
+    <b class="row gap8" style=${{ alignItems: 'flex-start' }}><span class="cb" style=${{ marginTop: 2 }}><${Icon} n="bell" c="s" /></span>Remind you on ${when}?</b>
+    <span class="small c2">Browser notifications are off. Allow them and this browser will remind you about ${r.name} on ${when}${R.CLOUD_ACCOUNT ? ', even when the app is closed' : ''}.</span>
+    <div class="row"><${Btn} v="secondary" sm icon="bell" onClick=${ctx.enableNotifications}>Allow notifications<//></div>
+  </div>`;
 }
 
 // ---------- Decide later ----------
