@@ -33,14 +33,14 @@
   const TONES = ['rose', 'sky', 'lavender', 'yellow', 'peach'];
 
   const TEMPLATES = [
-    { name: 'Netflix', category: 'subscription', amount: 15.49, cycle: 'monthly', tone: 'rose' },
-    { name: 'Spotify Family', category: 'subscription', amount: 17.99, cycle: 'monthly', tone: 'yellow' },
-    { name: 'Disney+', category: 'subscription', amount: 9.99, cycle: 'monthly', tone: 'lavender' },
-    { name: 'iCloud+', category: 'subscription', amount: 2.99, cycle: 'monthly', tone: 'sky' },
-    { name: 'YouTube Premium', category: 'subscription', amount: 11.99, cycle: 'monthly', tone: 'rose' },
-    { name: 'ChatGPT Plus', category: 'subscription', amount: 20, cycle: 'monthly', tone: 'sky' },
-    { name: 'Adobe Creative Cloud', category: 'subscription', amount: 24.19, cycle: 'monthly', tone: 'peach' },
-    { name: 'Amazon Prime', category: 'subscription', amount: 8.99, cycle: 'monthly', tone: 'yellow' },
+    { name: 'Netflix', url: 'https://www.netflix.com/cancelplan', category: 'subscription', amount: 15.49, cycle: 'monthly', tone: 'rose' },
+    { name: 'Spotify Family', url: 'https://www.spotify.com/account/subscription/', category: 'subscription', amount: 17.99, cycle: 'monthly', tone: 'yellow' },
+    { name: 'Disney+', url: 'https://www.disneyplus.com/account', category: 'subscription', amount: 9.99, cycle: 'monthly', tone: 'lavender' },
+    { name: 'iCloud+', url: 'https://support.apple.com/HT207594', category: 'subscription', amount: 2.99, cycle: 'monthly', tone: 'sky' },
+    { name: 'YouTube Premium', url: 'https://www.youtube.com/paid_memberships', category: 'subscription', amount: 11.99, cycle: 'monthly', tone: 'rose' },
+    { name: 'ChatGPT Plus', url: 'https://help.openai.com/en/articles/7232927', category: 'subscription', amount: 20, cycle: 'monthly', tone: 'sky' },
+    { name: 'Adobe Creative Cloud', url: 'https://account.adobe.com/plans', category: 'subscription', amount: 24.19, cycle: 'monthly', tone: 'peach' },
+    { name: 'Amazon Prime', url: 'https://www.amazon.com/gp/primecentral', category: 'subscription', amount: 8.99, cycle: 'monthly', tone: 'yellow' },
     { name: 'Gym membership', category: 'payment', amount: 29, cycle: 'monthly', tone: 'yellow' },
     { name: 'Home internet', category: 'payment', amount: 14, cycle: 'monthly', tone: 'sky' },
     { name: 'Car liability insurance', category: 'insurance', amount: 186, cycle: 'yearly', tone: 'lavender' },
@@ -72,7 +72,7 @@
       const history = [{ type: 'created', date: created, text: 'Created' }];
       const r = {
         id, name, category, amount, cycle, date: off(offset), remind, channel: 'browser',
-        note: extra.note || '', status: extra.status || 'active', reason: extra.reason || '',
+        link: (TEMPLATES.find((t) => t.name === name) || {}).url || '', note: extra.note || '', status: extra.status || 'active', reason: extra.reason || '',
         followUp: extra.follow != null ? off(extra.follow) : '', tone, history,
       };
       if (r.status === 'unfinished') {
