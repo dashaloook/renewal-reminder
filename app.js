@@ -338,8 +338,8 @@ function Shell({ ctx, page, children }) {
   const active = page === 'dashboard' ? 'dashboard' : 'reminders';
   useEffect(() => { if (!menu) return; const k = (e) => e.key === 'Escape' && setMenu(false); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [menu]);
   const Menu = () => html`<div class="menu" role="menu" style=${{ minWidth: 200 }}>
-    <button role="menuitem" onClick=${() => { setMenu(false); ctx.logout(); }}><${Icon} n="logout" c="s" />Log out</button>
-    ${R.CLOUD_ACCOUNT && ctx.openDeleteAccount && html`<button role="menuitem" class="danger-item" onClick=${() => { setMenu(false); ctx.openDeleteAccount(); }}><${Icon} n="trash" c="s" />Delete account</button>`}</div>`;
+    ${R.CLOUD_ACCOUNT && ctx.openDeleteAccount && html`<button role="menuitem" class="danger-item" onClick=${() => { setMenu(false); ctx.openDeleteAccount(); }}><${Icon} n="trash" c="s" />Delete account</button><div class="menu-sep" role="separator"></div>`}
+    <button role="menuitem" onClick=${() => { setMenu(false); ctx.logout(); }}><${Icon} n="logout" c="s" />Log out</button></div>`;
   return html`<div class="app">
     <aside class=${'sidebar' + (collapsed ? ' collapsed' : '')} aria-label="Main navigation">
       <div class="side-head"><div class="brand"><span class="brand-mark"><${Icon} n="bell" c="s" /></span><span class="lbl col brand-txt"><span>Renewal Reminder</span><${Demo} /></span></div>

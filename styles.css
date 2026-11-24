@@ -415,3 +415,4 @@ svg.icon{max-width:none}
 .badge-btn{border:0;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;line-height:18px}
 .badge-btn:hover{background:var(--brand);color:#fff}
 .badge-btn:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.menu .menu-sep{height:1px;background:var(--muted);margin:6px 12px}
