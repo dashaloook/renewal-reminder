@@ -118,6 +118,7 @@ In **Settings → Environment Variables** add `BREVO_API_KEY` and `BREVO_SENDER`
 - **The Firebase config is public on purpose.** Unlike the Brevo key, it isn't a secret: it only names the project. Security comes from two other places:
   - **Database rules** (`firestore.rules`, published in Firebase): a signed-in user can read and write only `users/{their own id}`; everyone else is refused. Checked: an anonymous read or write gets `permission-denied`.
   - **Authorized domains**: sign-in only works on `localhost` and the live Vercel site.
+  - **Own sign-in address**: Google's sign-in window shows `renewduck.vercel.app`, not Firebase's default address. `vercel.json` passes `/__/auth/*` through to Firebase, and that address is registered as a redirect URI for the Google OAuth client.
 - **Logging out** removes the user's reminders from the browser, so the next person on the same computer can't see them.
 - Data is stored in Firestore in Warsaw (`europe-central2`), the closest Google location to Ukraine.
 
