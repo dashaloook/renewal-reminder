@@ -2,6 +2,8 @@
 
 **Live:** https://renewduck.vercel.app · **Code:** https://github.com/dashaloook/renewal-reminder
 
+> Deploying, operating or taking over this app? Start with **[DEPLOY.md](DEPLOY.md)** — setup from scratch, environment variables, release & rollback, smoke tests, security model, QA checklist and what's still needed for production.
+
 A browser app that helps you decide about subscriptions and other renewals before you're charged: keep it, cancel it, or decide later with a reason, and get reminded again.
 
 Coursework prototype. Reminders are stored in your browser (`localStorage`); there is no database. The **email reminder** is real: it goes through our own serverless API to the email service [Brevo](https://www.brevo.com).

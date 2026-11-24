@@ -3,3 +3,5 @@ dev_server.py
 .env.*
 !.env.example
 .claude/
+tests/
+DEPLOY.md
