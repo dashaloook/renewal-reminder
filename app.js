@@ -166,12 +166,14 @@ function App() {
   const view = { ...state, reminders, notif: notifOn };
   const update = (fn) => setState((s) => ({ ...s, ...fn(s) }));
 
-  const showToast = (title, desc, undoSnapshot) => {
-    const id = uid(); setToast({ id, title, desc, undo: undoSnapshot });
+  // reopen = the reminder whose details were open when the action happened; Undo opens it again.
+  const showToast = (title, desc, undoSnapshot, reopen) => {
+    const id = uid(); setToast({ id, title, desc, undo: undoSnapshot, reopen: reopen || null });
     setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 6000);
   };
-  // Undo reverts the change and closes any open details/dialog, so you're back on the page you were on.
-  const undo = () => { if (toast && toast.undo) { setState((s) => ({ ...s, ...toast.undo })); setToast(null); setDrawer(null); setLater(null); setConfirm(null); } };
+  // Undo puts you back where you were: the change is reverted, and if you acted from a reminder's
+  // details, those details open again so you can choose differently. Otherwise nothing stays open.
+  const undo = () => { if (toast && toast.undo) { setState((s) => ({ ...s, ...toast.undo })); setLater(null); setConfirm(null); setDrawer(toast.reopen || null); setToast(null); } };
 
   const decide = (id, status) => {
     const snap = { reminders: state.reminders, stats: state.stats };
@@ -181,7 +183,7 @@ function App() {
       reminders: s.reminders.map((x) => x.id !== id ? x : { ...x, status, reason: '', followUp: '', history: [...x.history, { type: status, date: R.iso(R.today()), text: status === 'cancelled' ? 'Decided: I cancelled it' : 'Decided: Keep it' }] }),
       stats: { onTime: s.stats.onTime + (onTime ? 1 : 0), total: s.stats.total + 1 },
     }));
-    showToast(`${r.name}: ${status === 'cancelled' ? 'marked as cancelled' : 'kept'}`, 'Totals updated. You can undo for 6 seconds.', snap);
+    showToast(`${r.name}: ${status === 'cancelled' ? 'marked as cancelled' : 'kept'}`, 'Totals updated. You can undo for 6 seconds.', snap, drawer === id ? id : null);
   };
   const postpone = (id, reason, note, followUp, silent) => {
     const r = state.reminders.find((x) => x.id === id);
@@ -192,7 +194,7 @@ function App() {
     const snap = { reminders: state.reminders };
     const r = state.reminders.find((x) => x.id === id);
     update((s) => ({ reminders: s.reminders.filter((x) => x.id !== id) })); setDrawer(null);
-    showToast(`${r.name} reminder deleted`, 'Your subscription itself was not changed.', snap);
+    showToast(`${r.name} reminder deleted`, 'Your subscription itself was not changed.', snap, drawer === id ? id : null);
   };
   const upsert = (rec) => update((s) => {
     const exists = s.reminders.some((x) => x.id === rec.id);
