@@ -150,6 +150,8 @@ def process(method, headers, raw_body, ip, env=None, sender_fn=None):
     except urllib.error.HTTPError as e:
         detail = e.read()[:500].decode("utf-8", "replace")
         print(f"[send_reminder] Resend HTTP {e.code}: {detail}")  # server log only
+        if "api key" in detail.lower():
+            return 502, {"error": "The email service rejected the server’s API key. Check RESEND_API_KEY in Vercel."}
         if e.code in (401, 403):
             return 502, {"error": "The email service rejected the server’s key or recipient."}
         return 502, {"error": "The email service couldn’t send this email."}
