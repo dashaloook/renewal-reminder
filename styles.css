@@ -112,7 +112,7 @@ h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
 .charts>*,.kpis>*,.ucards>*,.form-layout>*,.grid2>*{min-width:0}
 svg{max-width:100%}
 .list-card{overflow:hidden}
-.rrow{display:grid;grid-template-columns:40px minmax(160px,2fr) 104px minmax(148px,1.2fr) minmax(230px,1.3fr) 20px;align-items:center;column-gap:24px;padding:16px 20px;border:0;border-bottom:1px solid var(--muted);background:var(--surface);width:100%;text-align:left}
+.rrow{display:grid;grid-template-columns:40px minmax(160px,1.6fr) 104px minmax(148px,1fr) minmax(230px,1.3fr) 20px;align-items:center;column-gap:24px;padding:16px 20px;border:0;border-bottom:1px solid var(--muted);background:var(--surface);width:100%;text-align:left}
 .rrow:last-child{border-bottom:0}
 .rrow:hover{background:#FAFAFC}
 .rrow .amt{text-align:right}
@@ -405,3 +405,7 @@ textarea.input{line-height:1.5}
 .rrow .st-reason{font-size:13px;color:var(--brand);text-align:right;line-height:1.35}
 .rrow .reason-inline{display:none}
 @media (max-width:1180px){.rrow .reason-inline{display:flex}}
+/* Date and status columns read from the left (badge + reason start at the column edge) */
+.rrow .when{justify-self:start}
+.rrow .st{justify-self:start;align-items:flex-start}
+.rrow .st-reason{text-align:left}
