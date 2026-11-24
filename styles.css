@@ -384,3 +384,6 @@ textarea.input{line-height:1.5}
 .note-line .note-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-style:italic}
 .note-line.in-row{margin-top:2px}
 .rrow .nm{min-width:0}
+/* List search never shrinks below a usable width; the filters move to the next line instead */
+.filters-row{flex-wrap:wrap}
+.filters-row>.grow{flex:1 1 220px;min-width:220px}
