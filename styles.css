@@ -112,7 +112,7 @@ h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
 .charts>*,.kpis>*,.ucards>*,.form-layout>*,.grid2>*{min-width:0}
 svg{max-width:100%}
 .list-card{overflow:hidden}
-.rrow{display:grid;grid-template-columns:40px minmax(160px,2fr) 104px minmax(148px,1.5fr) minmax(150px,1fr) 20px;align-items:center;column-gap:24px;padding:16px 20px;border:0;border-bottom:1px solid var(--muted);background:var(--surface);width:100%;text-align:left}
+.rrow{display:grid;grid-template-columns:40px minmax(160px,2fr) 104px minmax(148px,1.2fr) minmax(230px,1.3fr) 20px;align-items:center;column-gap:24px;padding:16px 20px;border:0;border-bottom:1px solid var(--muted);background:var(--surface);width:100%;text-align:left}
 .rrow:last-child{border-bottom:0}
 .rrow:hover{background:#FAFAFC}
 .rrow .amt{text-align:right}
