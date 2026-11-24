@@ -373,3 +373,14 @@ textarea.input{height:auto;min-height:80px;padding:12px 16px;resize:vertical}
 .menu .danger-item{color:var(--danger)}.menu .danger-item:hover{background:var(--danger-subtle)}
 /* Scrolling the services list never scrolls the page behind it */
 .listbox{overscroll-behavior:contain}
+/* Focus/error borders are 1px thicker, so padding shrinks by 1px — but keep each field's own spacing:
+   the note box keeps 12px at the top, password fields keep room for the Show button. */
+textarea.input:focus,textarea.input.err,textarea.input.warn{padding:11px 15px}
+.input-wrap .input:focus,.input-wrap .input.err,.input-wrap .input.warn{padding-right:83px}
+textarea.input{line-height:1.5}
+/* Reminder note: one quiet line with a pencil, shortened with … when long */
+.note-line{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:13px;color:var(--text-2);min-width:0;max-width:100%}
+.note-line .icon{flex:none;color:var(--text-3)}
+.note-line .note-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-style:italic}
+.note-line.in-row{margin-top:2px}
+.rrow .nm{min-width:0}
