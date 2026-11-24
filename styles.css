@@ -412,3 +412,6 @@ textarea.input{line-height:1.5}
 /* Icons never shrink: long text next to them used to squeeze a 16px icon down to ~10px wide */
 svg.icon{max-width:none}
 .msg-ic{display:inline-flex;flex:none;width:16px;height:16px;margin-top:2px}
+.badge-btn{border:0;cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;line-height:18px}
+.badge-btn:hover{background:var(--brand);color:#fff}
+.badge-btn:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
