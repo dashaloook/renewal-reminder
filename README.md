@@ -61,7 +61,7 @@ Every morning at 08:00 Kyiv time (06:00 UTC) **Vercel Cron** runs `api/daily_rem
 
 Security: only Vercel can start the job (it sends `CRON_SECRET`; other requests get 401). The job reads the database with a Firebase service-account key stored only in Vercel (`FIREBASE_SERVICE_ACCOUNT`, Secret), never in the code, GitHub or the browser. It only reads, never writes, and never takes the recipient from the database (users could edit that). Errors are logged without email addresses.
 
-Limit: on Resend's free plan the emails only reach the Resend account owner until a domain is verified.
+**Which service sends the email:** if `GMAIL_USER` and `GMAIL_APP_PASSWORD` are set in Vercel, emails go out through Gmail (SMTP with a Google App Password, not the real Gmail password). Gmail delivers to **every user's own address**, free, up to about 500 emails a day, so different people each get their own reminders. Otherwise the server falls back to Resend, whose free plan only reaches the Resend account owner until a domain is verified.
 
 ## Run locally
 
@@ -82,7 +82,7 @@ In **Settings → Environment Variables** add `RESEND_API_KEY` as **Secret** (op
 - **It never reaches GitHub**: `.gitignore` excludes `.env`, `.env.local` and `.env.*.local`. The repository only has `.env.example` with empty values, so others know which variables to set.
 - **It never reaches the browser**: only the server function reads `RESEND_API_KEY`. The browser calls `/api/send_reminder`; the key isn't in the page source, `app.js` or network requests.
 - **Each person gets only their own emails**: the email button exists only for real accounts (Google or email). The browser sends its Firebase sign-in token; the server asks Google who it belongs to and sends to that confirmed address (email accounts must open the confirmation link first). The browser can't choose the recipient, so the endpoint can't be used to email strangers, and one user never receives another user's reminders. Demo accounts don't get emails.
-- **Free-plan limit**: Resend's free test sender (`onboarding@resend.dev`) only delivers to the Resend account owner. To email every user, verify a domain in Resend and set `RESEND_FROM` (e.g. `Renewal Reminder <hi@yourdomain.com>`). Until then, other users see a clear message instead of an email.
+- **Free-plan limit**: with Resend only, the free test sender (`onboarding@resend.dev`) only delivers to the Resend account owner; sending through Gmail (`GMAIL_USER` + `GMAIL_APP_PASSWORD`) removes this. To email every user, verify a domain in Resend and set `RESEND_FROM` (e.g. `Renewal Reminder <hi@yourdomain.com>`). Until then, other users see a clear message instead of an email.
 - **Input is checked**: name length, date format, amount range and request size are validated; text is HTML-escaped before it goes into the email.
 - **Abuse is slowed down**: 5 emails per 10 minutes per user, and optionally only requests from my own site (`ALLOWED_ORIGIN`).
 - **Errors don't leak details**: the email service's error replies are logged on the server; the browser gets a short message.

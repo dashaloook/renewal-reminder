@@ -29,7 +29,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from send_reminder import build_email, _send  # noqa: E402  (shared email template + Resend call)
+from send_reminder import build_email, mail_channel, friendly_send_error  # noqa: E402  (shared email code)
 
 TZ = "Europe/Kyiv"
 SCOPES = ["https://www.googleapis.com/auth/datastore", "https://www.googleapis.com/auth/identitytoolkit",
@@ -140,10 +140,10 @@ def lookup_emails(sa, token, uids):
 def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=None):
     """Pure job logic: returns (status, summary). Injectable for tests."""
     env = os.environ if env is None else env
-    api_key = env.get("RESEND_API_KEY", "").strip()
+    channel = mail_channel(env)
     raw = env.get("FIREBASE_SERVICE_ACCOUNT", "").strip()
-    if not raw or not api_key:
-        return 503, {"error": "Not set up: add FIREBASE_SERVICE_ACCOUNT and RESEND_API_KEY in Vercel."}
+    if not raw or not channel:
+        return 503, {"error": "Not set up: add FIREBASE_SERVICE_ACCOUNT and an email service (Gmail or Resend) in Vercel."}
     try:
         sa = json.loads(raw)
     except ValueError:
@@ -158,9 +158,9 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
 
     due = [(uid, r, d, n) for uid, rs in users for r in rs if isinstance(r, dict) for ok, d, n in [due_today(r, today)] if ok]
     emails = (lookup_fn or (lambda ids: lookup_emails(sa, token, ids)))(sorted({u for u, *_ in due})) if due else {}
-    sender = env.get("RESEND_FROM", "").strip() or "Renewal Reminder <onboarding@resend.dev>"
-    send = send_fn or _send
-    summary = {"date": today.isoformat(), "users": len(users), "due": len(due), "sent": 0, "skipped_unconfirmed": 0, "failed": 0, "dry": dry}
+    send, secret, sender, service = channel
+    send = send_fn or send
+    summary = {"service": service, "date": today.isoformat(), "users": len(users), "due": len(due), "sent": 0, "skipped_unconfirmed": 0, "failed": 0, "dry": dry}
     for uid, r, d, n in due:
         to = emails.get(uid)
         if not to:
@@ -173,11 +173,11 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
         subject, text, body = build_email({"name": str(r["name"])[:80], "date": d.isoformat(), "amount": float(amount) if isinstance(amount, (int, float)) else 0.0,
                                            "cycle": r.get("cycle") if r.get("cycle") in ("weekly", "monthly", "yearly", "one-time") else "monthly", "daysLeft": n})
         try:
-            send(api_key, sender, to, subject, text, body)
+            send(secret, sender, to, subject, text, body)
             summary["sent"] += 1
         except Exception as e:
-            detail = e.read()[:300].decode("utf-8", "replace") if hasattr(e, "read") else repr(e)
-            print(f"[daily] send failed for user {uid[:6]}…: {detail}")  # server log only, no email address
+            print(f"[daily] send failed for user {uid[:6]}…")  # no email address in logs
+            friendly_send_error(e)
             summary["failed"] += 1
     print(f"[daily] {summary}")
     return 200, summary

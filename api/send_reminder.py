@@ -3,8 +3,9 @@
 Runs as a Vercel Python serverless function, and locally through dev_server.py.
 
 Security model
-- The Resend key is read from the RESEND_API_KEY environment variable on the
-  server. It is never sent to the browser and never written in the code.
+- Emails go out through Gmail (GMAIL_USER + GMAIL_APP_PASSWORD) when those are
+  set, otherwise through Resend (RESEND_API_KEY). The secrets are read from
+  environment variables on the server. It is never sent to the browser and never written in the code.
 - The email goes to the signed-in person's own, confirmed address (Google or
   email account). The browser
   sends its Firebase sign-in token; the server checks it with Google and reads
@@ -120,6 +121,56 @@ def _send(api_key, sender, to, subject, text, body):
         return json.loads(res.read() or b"{}")
 
 
+def _send_gmail(app_password, sender, to, subject, text, body):
+    """Send through Gmail (SMTP) with a Google App Password. Reaches any address."""
+    import smtplib
+    from email.message import EmailMessage
+    from email.utils import parseaddr
+    user = parseaddr(sender)[1]
+    msg = EmailMessage()
+    msg["From"], msg["To"], msg["Subject"] = sender, to, subject
+    msg.set_content(text)
+    msg.add_alternative(body, subtype="html")
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as smtp:
+        smtp.login(user, app_password)
+        smtp.send_message(msg)
+    return {"id": None}
+
+
+def mail_channel(env):
+    """Which email service to use: Gmail if its secrets are set, else Resend.
+    Returns (send_fn, secret, sender, name) or None if neither is set up."""
+    g_user = env.get("GMAIL_USER", "").strip()
+    g_pass = env.get("GMAIL_APP_PASSWORD", "").replace(" ", "").strip()
+    if g_user and g_pass:
+        return _send_gmail, g_pass, f"Renewal Reminder <{g_user}>", "gmail"
+    key = env.get("RESEND_API_KEY", "").strip()
+    if key:
+        return _send, key, env.get("RESEND_FROM", "").strip() or "Renewal Reminder <onboarding@resend.dev>", "resend"
+    return None
+
+
+def friendly_send_error(e):
+    """Server-log the real error; return a short, safe message for the browser."""
+    import smtplib
+    if isinstance(e, smtplib.SMTPAuthenticationError):
+        print(f"[mail] Gmail login failed: {e.smtp_code}")
+        return "Gmail rejected the server’s app password. Check GMAIL_USER and GMAIL_APP_PASSWORD in Vercel.", None
+    if isinstance(e, smtplib.SMTPRecipientsRefused):
+        print("[mail] Gmail refused the recipient")
+        return "Gmail couldn’t deliver to this address.", None
+    if isinstance(e, urllib.error.HTTPError):
+        detail = e.read()[:500].decode("utf-8", "replace")
+        print(f"[mail] Resend HTTP {e.code}: {detail}")
+        if "your own email" in detail.lower() or "verify a domain" in detail.lower():
+            return "The email service’s free plan can only email the app owner. To email everyone, the owner must verify a domain in Resend.", "owner_only"
+        if "api key" in detail.lower():
+            return "The email service rejected the server’s API key. Check RESEND_API_KEY in Vercel.", None
+        return "The email service couldn’t send this email.", None
+    print(f"[mail] send failed: {e!r}")
+    return "Couldn’t reach the email service. Try again.", None
+
+
 def _lookup(firebase_key, id_token):
     """Ask Google who this sign-in token belongs to. Returns the user dict or None."""
     payload = json.dumps({"idToken": id_token}).encode()
@@ -136,7 +187,6 @@ def _lookup(firebase_key, id_token):
 def process(method, headers, raw_body, ip, env=None, sender_fn=None, lookup_fn=None):
     """Pure request logic: returns (status, json_dict). Used by Vercel and dev_server.py."""
     env = os.environ if env is None else env
-    send = sender_fn or _send
     lookup = lookup_fn or _lookup
     if method == "OPTIONS":
         return 204, {}
@@ -163,8 +213,8 @@ def process(method, headers, raw_body, ip, env=None, sender_fn=None, lookup_fn=N
     if not id_token or len(id_token) > 4096:
         return 401, {"error": "Log in with Google or your email account to get reminder emails.", "code": "signin_required"}
 
-    api_key = env.get("RESEND_API_KEY", "").strip()
-    if not api_key:
+    channel = mail_channel(env)
+    if not channel:
         return 503, {"error": "Email isn’t set up on the server yet.", "code": "not_configured"}
 
     try:
@@ -181,23 +231,14 @@ def process(method, headers, raw_body, ip, env=None, sender_fn=None, lookup_fn=N
     if _rate_limited(user.get("localId") or ip or "unknown"):
         return 429, {"error": "Too many test emails. Try again in a few minutes."}
 
-    sender = env.get("RESEND_FROM", "").strip() or "Renewal Reminder <onboarding@resend.dev>"
+    send, secret, sender, _ = channel
+    send = sender_fn or send
     subject, text, body = build_email(reminder)
     try:
-        result = send(api_key, sender, to, subject, text, body)
-    except urllib.error.HTTPError as e:
-        detail = e.read()[:500].decode("utf-8", "replace")
-        print(f"[send_reminder] Resend HTTP {e.code}: {detail}")  # server log only
-        if "your own email" in detail.lower() or "verify a domain" in detail.lower():
-            return 502, {"error": "The email service’s free plan can only email the app owner. To email everyone, the owner must verify a domain in Resend.", "code": "owner_only"}
-        if "api key" in detail.lower():
-            return 502, {"error": "The email service rejected the server’s API key. Check RESEND_API_KEY in Vercel."}
-        if e.code in (401, 403):
-            return 502, {"error": "The email service rejected this email."}
-        return 502, {"error": "The email service couldn’t send this email."}
-    except Exception as e:  # network errors, timeouts
-        print(f"[send_reminder] send failed: {e!r}")
-        return 502, {"error": "Couldn’t reach the email service. Try again."}
+        result = send(secret, sender, to, subject, text, body) or {}
+    except Exception as e:
+        msg, code = friendly_send_error(e)
+        return 502, {"error": msg, **({"code": code} if code else {})}
     return 200, {"ok": True, "id": result.get("id"), "to": to}
 
 
