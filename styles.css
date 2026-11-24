@@ -400,3 +400,8 @@ textarea.input{line-height:1.5}
 /* List search never shrinks below a usable width; the filters move to the next line instead */
 .filters-row{flex-wrap:wrap}
 .filters-row>.grow{flex:1 1 220px;min-width:220px}
+/* Postponed reason sits under the status badge (right column); under the name only when that column is hidden */
+.rrow .st{flex-direction:column;align-items:flex-end;gap:6px}
+.rrow .st-reason{font-size:13px;color:var(--brand);text-align:right;line-height:1.35}
+.rrow .reason-inline{display:none}
+@media (max-width:1180px){.rrow .reason-inline{display:flex}}
