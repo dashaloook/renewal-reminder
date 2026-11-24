@@ -593,7 +593,7 @@ function MonthBars({ data }) {
   <table class="sr-only"><caption>Charges per month</caption><tbody>${data.map((d) => html`<tr><th>${d.long}</th><td>${money(d.value)}</td></tr>`)}</tbody></table></div>`;
 }
 // The reminder's own note. row = list (2 lines max), card = Added/Saved card (own section under a divider).
-const NoteLine = ({ note, row, card }) => (note && note.trim()) ? html`<div class=${'note-line' + (row ? ' in-row' : '') + (card ? ' in-card' : '')} title=${row ? note : undefined}><${Icon} n="note" c="xs" /><span class="note-txt">${note.trim()}</span></div>` : null;
+const NoteLine = ({ note, row, card }) => (note && note.trim()) ? html`<div class=${'note-line' + (row ? ' in-row' : '') + (card ? ' in-card' : '')} title=${row ? note : undefined}><span class="note-txt">${note.trim()}</span></div>` : null;
 function Row({ r, ctx, isNew }) {
   return html`<button class=${'rrow' + (isNew ? ' is-new' : '')} onClick=${() => ctx.openDrawer(r.id)} aria-label=${`${isNew ? 'New reminder, ' : ''}${r.name}, ${amountLine(r)}, ${fmt(r.date)}, ${rel(R.daysUntil(r.date))}, ${r.status === 'unfinished' ? 'unfinished decision: ' + r.reason : r.status}${r.note ? ', note: ' + r.note : ''}`}>
     <${Logo} r=${r} /><span class="nm grow col" style=${{ gap: 2 }}><span class="nm-line"><b class="h3" style=${{ fontSize: 16 }}>${r.name}</b><span class="nm-cat">/ ${cat(r.category).one}</span></span><${NoteLine} note=${r.note} row />${r.status === 'unfinished' && html`<span class="small cb row gap4"><${Icon} n="hourglass" c="xs" />Postponed: ${r.reason}</span>`}${(isNew || r.status === 'kept' || r.status === 'cancelled') && html`<span class="st-inline">${isNew ? html`<span class="badge t-brand">New</span>` : html`<${StatusBadge} r=${r} />`}</span>`}</span>
@@ -632,7 +632,7 @@ function Drawer({ r, ctx, onClose }) {
         <div><dt>Amount</dt><dd>${amountLine(r)}</dd></div>${r.amount > 0 && r.cycle !== 'one-time' && html`<div><dt>Per year</dt><dd>${money(R.monthlyEq({ ...r, status: 'active' }) * 12)}</dd></div>`}
         <div><dt>${r.category === 'document' ? 'Expires' : 'Next charge'}</dt><dd>${fmt(r.date, { day: 'numeric', month: 'long', year: 'numeric' })} (${rel(n).toLowerCase()})</dd></div>
         <div><dt>Remind me</dt><dd>${remindTxt(r.remind)} · ${r.channel === 'email' ? 'Email' : 'Browser'}</dd></div>
-        ${r.note && r.note.trim() ? html`<div class="note-row"><dt>Note</dt><dd><${Icon} n="note" c="xs" /><span>${r.note.trim()}</span></dd></div>` : html`<div><dt>Note</dt><dd>—</dd></div>`}</dl>
+        ${r.note && r.note.trim() ? html`<div class="note-row"><dt>Note</dt><dd>${r.note.trim()}</dd></div>` : html`<div><dt>Note</dt><dd>—</dd></div>`}</dl>
       ${r.status !== 'cancelled' && (r.channel === 'email' ? html`<div class="col" style=${{ gap: 8 }}><b>Email reminder</b>
         ${R.CLOUD_ACCOUNT ? html`<span class="small c2">On the reminder day we email <b>${R.USER.email}</b>. Send yourself a test now to see it.</span>
         <div><${Btn} v="secondary" sm icon="mail" loading=${mail.s === 'sending'} onClick=${sendTest}>${mail.s === 'sending' ? 'Sending…' : 'Send test email'}<//></div>`
