@@ -409,3 +409,6 @@ textarea.input{line-height:1.5}
 .rrow .when{justify-self:center;width:136px}
 .rrow .st{justify-self:start;align-items:flex-start}
 .rrow .st-reason{text-align:left}
+/* Icons never shrink: long text next to them used to squeeze a 16px icon down to ~10px wide */
+svg.icon{max-width:none}
+.msg-ic{display:inline-flex;flex:none;width:16px;height:16px;margin-top:2px}

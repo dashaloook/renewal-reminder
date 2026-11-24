@@ -166,10 +166,12 @@ function App() {
   const reminders = QS === 'empty' ? [] : state.reminders;
   // Notifications count as "on" only if the browser really allows them on this device.
   const pushApi = window.RRPush;
-  // On = this browser already allows notifications (also when allowed earlier, before this account);
-  // blocked = the person said "Block", so a button can't help — we explain how to unblock instead.
+  // On = this account turned notifications on AND this browser allows them. Each account chooses for
+  // itself: a new account starts off, even if the browser allowed them for someone before (then
+  // "Allow notifications" turns them on at once, without asking the browser again).
+  // Blocked = the person said "Block" in the browser, so a button can't help — we explain how to unblock.
   const notifPerm = pushApi ? pushApi.permission() : 'unsupported';
-  const notifOn = notifPerm === 'granted';
+  const notifOn = !!state.notif && notifPerm === 'granted';
   const view = { ...state, reminders, notif: notifOn, notifBlocked: notifPerm === 'denied' };
   const update = (fn) => setState((s) => ({ ...s, ...fn(s) }));
 
@@ -676,11 +678,11 @@ function AddedDialog({ r, ctx }) {
 // Says exactly where the reminder will go: which email address, or this browser.
 function ChannelNote({ r, ctx, on }) {
   const when = fmt(on);
-  const box = (icon, tone, body) => html`<div class="row gap12" role="status" style=${{ padding: 14, borderRadius: 12, width: '100%', textAlign: 'left', background: tone === 'ok' ? 'var(--success-subtle)' : 'var(--warning-subtle)', alignItems: 'flex-start' }}><span style=${{ color: tone === 'ok' ? 'var(--success)' : 'var(--warning)', marginTop: 2 }}><${Icon} n=${icon} c="s" /></span><div class="small" style=${{ color: 'var(--text)' }}>${body}</div></div>`;
+  const box = (icon, tone, body) => html`<div class="row gap12" role="status" style=${{ padding: 14, borderRadius: 12, width: '100%', textAlign: 'left', background: tone === 'ok' ? 'var(--success-subtle)' : 'var(--warning-subtle)', alignItems: 'flex-start' }}><span class="msg-ic" style=${{ color: tone === 'ok' ? 'var(--success)' : 'var(--warning)' }}><${Icon} n=${icon} c="s" /></span><div class="small" style=${{ color: 'var(--text)' }}>${body}</div></div>`;
   if (r.channel === 'email') return R.CLOUD_ACCOUNT
     ? box('mail', 'ok', html`<b>Email reminder is set.</b> We’ll email <b>${R.USER.email}</b> on ${when}. If it isn’t in your inbox, check Spam and mark it “Not spam”.`)
     : box('info', 'warn', html`<b>Email reminders need a real account.</b> Log in with Google or your email account and we’ll email you on ${when}.`);
-  if (ctx.state.notif) return box('bell', 'ok', html`<b>You’re all set.</b> Notifications are already on in this browser, so we’ll remind you here on ${when}${R.CLOUD_ACCOUNT ? ' — even if the app is closed' : ''}.`);
+  if (ctx.state.notif) return box('bell', 'ok', html`<b>You’re all set.</b> Notifications are on, so we’ll remind you in this browser on ${when}${R.CLOUD_ACCOUNT ? ' — even if the app is closed' : ''}.`);
   if (ctx.state.notifBlocked) return box('bell-off', 'warn', html`<b>Notifications are blocked for this site.</b> To get this reminder on ${when}, allow them in your browser’s site settings — the icon to the left of the address.`);
   // Same look as the "Remind you…?" card on the form: clear question + a real button.
   return html`<div class="card pad20 col gap12" style=${{ width: '100%', textAlign: 'left', boxShadow: 'var(--shadow-s, 0 1px 2px rgba(22,19,43,.06))' }}>
@@ -927,7 +929,7 @@ function CreateForm({ ctx, editId }) {
         ${f.date && html`<div class="col gap12">${[['circle-check', 'Reminder set', 'Today'], ['bell', `We remind you (${f.channel === 'email' ? 'email' : 'browser'})`, fmt(remindDate)], ['calendar', `${f.name || 'It'} ${isDoc ? 'expires' : 'renews'}${f.amount && !isDoc && !amountBad ? ' · ' + money(amountNum) : ''}`, fmt(f.date)]].map(([ic, l, d]) => html`<div class="row gap12"><span class="cb"><${Icon} n=${ic} c="s" /></span><div><div>${l}</div><div class="small c3">${d}</div></div></div>`)}</div>`}
       </div>
       ${f.channel !== 'email' && (ctx.state.notif
-        ? html`<div class="card pad20 row gap12" style=${{ alignItems: 'flex-start' }}><span class="cb" style=${{ marginTop: 2 }}><${Icon} n="bell" c="s" /></span><div class="col" style=${{ gap: 4 }}><b>Notifications are on</b><span class="small c2">You allowed them in this browser earlier, so this reminder will reach you here${R.CLOUD_ACCOUNT ? ' — even when the app is closed' : ''}.</span></div></div>`
+        ? html`<div class="card pad20 row gap12" style=${{ alignItems: 'flex-start' }}><span class="cb msg-ic"><${Icon} n="bell" c="s" /></span><div class="col" style=${{ gap: 4 }}><b>Notifications are on</b><span class="small c2">This reminder will reach you in this browser${R.CLOUD_ACCOUNT ? ' — even when the app is closed' : ''}.</span></div></div>`
         : ctx.state.notifBlocked
         ? html`<div class="card pad20 col gap12"><b class="row"><span class="cb"><${Icon} n="bell-off" c="s" /></span>Notifications are blocked</b><span class="small c2">Notifications are blocked for this site. To get reminders here, allow them in your browser’s site settings — the icon to the left of the address. You can still save — it will show on your dashboard.</span></div>`
         : html`<div class="card pad20 col gap12"><b class="row"><span class="cb"><${Icon} n="bell" c="s" /></span>Remind you ${remindTxt(f.remind)}${f.name ? ` ${f.name} renews` : ''}?</b><span class="small c2">Browser notifications are off. You can still save without them — we’ll show it on your dashboard.</span>
