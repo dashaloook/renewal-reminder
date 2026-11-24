@@ -110,6 +110,7 @@ function App() {
   const [drawer, setDrawer] = useState(null);
   const [later, setLater] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const [delAccount, setDelAccount] = useState(false);
   const [added, setAdded] = useState(null); // { id, date, phase: 'popup' | 'new' } — the reminder that was just created
   const [, bump] = useState(0);
   const route = useRoute();
@@ -218,6 +219,15 @@ function App() {
     const returning = account === 'new' && state.account === 'new' && state.onboarded && state.user && state.user.email.toLowerCase() === (email || '').toLowerCase();
     go(returning ? 'dashboard' : 'onboarding');
   };
+  // Permanently delete a real account (see cloud.js), then clear this device.
+  const deleteAccount = async (password) => {
+    await cloud.deleteAccount(password);
+    cloudReady.current = false;
+    try { localStorage.removeItem('rr-notified'); sessionStorage.removeItem('rr-login-email'); } catch (e) { /* ok */ }
+    setDelAccount(false); setDrawer(null); setLater(null); setConfirm(null);
+    setState(freshState()); go('login');
+    showToast('Your account is deleted', 'Your reminders and settings are gone. Thanks for trying Renewal Reminder.', null);
+  };
   const logout = () => {
     // A real account: sign out of Google and remove its reminders from this device.
     if (isCloud(state.account)) { cloudReady.current = false; if (cloud) cloud.signOut(); setState(freshState()); go('login'); return; }
@@ -248,7 +258,7 @@ function App() {
     try { localStorage.setItem('rr-notified', JSON.stringify(seen)); } catch (e) { /* ok */ }
   }, [notifOn, state.authed, state.reminders]);
 
-  const ctx = { state: view, update, decide, postpone, remove, upsert, openDrawer: setDrawer, openLater: setLater, showToast, reset, logout, signIn, auth, confirm: setConfirm, added, setAdded, demo: QS, setDemo, enableNotifications };
+  const ctx = { state: view, update, decide, postpone, remove, upsert, openDrawer: setDrawer, openLater: setLater, showToast, reset, logout, signIn, auth, confirm: setConfirm, added, setAdded, demo: QS, setDemo, enableNotifications, openDeleteAccount: cloud ? () => setDelAccount(true) : null };
   // Opened from a notification: /?open=<reminder id>&act=keep|later|open. Handled once this
   // person's reminders have loaded (after sign-in too), then removed from the address.
   const fromNotif = useRef((() => { try { const q = new URLSearchParams(location.search); return q.get('open') ? { id: q.get('open'), act: q.get('act') || 'open' } : null; } catch (e) { return null; } })());
@@ -285,6 +295,7 @@ function App() {
     ${dr && html`<${Drawer} r=${dr} ctx=${ctx} onClose=${() => setDrawer(null)} />`}
     ${lt && html`<${DecideLater} r=${lt} ctx=${ctx} onClose=${() => setLater(null)} />`}
     ${confirm && html`<${Confirm} ...${confirm} onClose=${() => setConfirm(null)} />`}
+    ${delAccount && R.CLOUD_ACCOUNT && html`<${DeleteAccount} ctx=${ctx} count=${state.reminders.length} onDelete=${deleteAccount} onClose=${() => setDelAccount(false)} />`}
     <div aria-live="polite" class="sr-only">${toast ? toast.title : ''}</div>
     ${toast && html`<div class="toast" role="status"><${Icon} n="circle-check" /><div class="grow"><div style=${{ fontWeight: 600 }}>${toast.title}</div><div class="small" style=${{ color: 'var(--accent-text)' }}>${toast.desc}</div></div>
       ${toast.undo && html`<button class="undo" onClick=${undo}><${Icon} n="undo" c="s" />Undo</button>`}
@@ -301,7 +312,8 @@ function Shell({ ctx, page, children }) {
   const active = page === 'dashboard' ? 'dashboard' : 'reminders';
   useEffect(() => { if (!menu) return; const k = (e) => e.key === 'Escape' && setMenu(false); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [menu]);
   const Menu = () => html`<div class="menu" role="menu" style=${{ minWidth: 200 }}>
-    <button role="menuitem" onClick=${() => { setMenu(false); ctx.logout(); }}><${Icon} n="logout" c="s" />Log out</button></div>`;
+    <button role="menuitem" onClick=${() => { setMenu(false); ctx.logout(); }}><${Icon} n="logout" c="s" />Log out</button>
+    ${R.CLOUD_ACCOUNT && ctx.openDeleteAccount && html`<button role="menuitem" class="danger-item" onClick=${() => { setMenu(false); ctx.openDeleteAccount(); }}><${Icon} n="trash" c="s" />Delete account</button>`}</div>`;
   return html`<div class="app">
     <aside class=${'sidebar' + (collapsed ? ' collapsed' : '')} aria-label="Main navigation">
       <div class="side-head"><div class="brand"><span class="brand-mark"><${Icon} n="bell" c="s" /></span><span class="lbl col brand-txt"><span>Renewal Reminder</span><${Demo} /></span></div>
@@ -687,6 +699,43 @@ function Confirm({ title, body, tip, ok, danger, onOk, onClose }) {
   return html`<div class="scrim" style=${{ zIndex: 58 }} onClick=${onClose}></div><div class="dialog" style=${{ width: 480, zIndex: 61 }} role="alertdialog" aria-modal="true" aria-labelledby="cf-h" aria-describedby="cf-b" ref=${ref}>
     <h2 class="h2" id="cf-h">${title}</h2><p class="c2" id="cf-b" style=${{ margin: 0 }}>${body}</p>${tip && html`<div class="row small c2" style=${{ padding: '8px 12px', background: 'var(--subtle)', borderRadius: 8 }}><${Icon} n="info" c="s" />${tip}</div>`}
     <div class="row" style=${{ justifyContent: 'flex-end' }}><${Btn} v="secondary" data-autofocus onClick=${onClose}>${danger ? 'Keep reminder' : 'Cancel'}<//><${Btn} v=${danger ? 'danger' : 'primary'} icon=${danger ? 'trash' : undefined} onClick=${() => { onOk(); onClose(); }}>${ok}<//></div></div>`;
+}
+
+// ---------- Delete account ----------
+function DeleteAccount({ ctx, count, onDelete, onClose }) {
+  const busyRef = useRef(false); const [busy, setBusy] = useState(false); const [err, setErr] = useState(''); const [pw, setPw] = useState('');
+  const close = () => { if (!busyRef.current) onClose(); };
+  const ref = useOverlay(close);
+  const isEmail = R.USER.provider === 'email';
+  const submit = async () => {
+    if (isEmail && !pw) { setErr('Enter your password to confirm it’s you.'); document.getElementById('del-pw').focus(); return; }
+    setErr(''); setBusy(true); busyRef.current = true;
+    try { await onDelete(pw); }
+    catch (e) {
+      busyRef.current = false; setBusy(false);
+      const c = (e && e.code) || '';
+      if (c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request') return; // changed their mind
+      setErr(['auth/wrong-password', 'auth/invalid-credential', 'auth/invalid-login-credentials'].includes(c) ? 'That password isn’t right. Nothing was deleted.' : (ctx.auth ? ctx.auth.friendly(e) : 'Something went wrong.') + ' Nothing was deleted.');
+    }
+  };
+  return html`<div class="scrim" style=${{ zIndex: 58 }} onClick=${close}></div>
+  <div class="dialog" style=${{ width: 500, zIndex: 61 }} role="alertdialog" aria-modal="true" aria-labelledby="da-h" aria-describedby="da-b" ref=${ref}>
+    <span class="logo lg" style=${{ background: 'var(--danger-subtle)', color: 'var(--danger)' }}><${Icon} n="trash" /></span>
+    <h2 class="h2" id="da-h">Delete your account?</h2>
+    <div class="col gap12" id="da-b">
+      <p class="c2" style=${{ margin: 0 }}>This permanently deletes <b style=${{ color: 'var(--text)' }}>${R.USER.email}</b> and everything in it. You can’t undo this.</p>
+      <ul class="c2" style=${{ margin: 0, paddingLeft: 20, display: 'grid', gap: 4 }}>
+        <li>${count} ${count === 1 ? 'reminder' : 'reminders'}, with their notes and history</li>
+        <li>Reminder emails and browser notifications stop</li>
+        <li>Your login is removed</li></ul>
+      <div class="row small c2" style=${{ padding: '8px 12px', background: 'var(--subtle)', borderRadius: 8 }}><${Icon} n="info" c="s" />Your subscriptions themselves aren’t cancelled. Cancel them on each service’s website.</div>
+      ${isEmail ? html`<div class="field"><label for="del-pw">Enter your password to confirm</label>
+          <input id="del-pw" class=${'input' + (err && !pw ? ' err' : '')} type="password" autocomplete="current-password" value=${pw} onInput=${(e) => setPw(e.target.value)} onKeyDown=${(e) => { if (e.key === 'Enter') submit(); }} /></div>`
+        : html`<p class="small c2" style=${{ margin: 0 }}>To make sure it’s you, Google will ask you to choose your account once more.</p>`}
+      ${err && html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${err}</span>`}
+    </div>
+    <div class="row" style=${{ justifyContent: 'flex-end' }}><${Btn} v="secondary" data-autofocus disabled=${busy} onClick=${close}>Keep my account<//><${Btn} v="danger" icon="trash" loading=${busy} onClick=${submit}>${busy ? 'Deleting…' : 'Delete account'}<//></div>
+  </div>`;
 }
 
 // ---------- Create / edit ----------

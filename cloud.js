@@ -41,6 +41,8 @@
     if (c === 'auth/user-disabled') return 'This account is switched off. Contact the app owner.';
     if (c === 'auth/operation-not-allowed') return 'Email accounts aren’t switched on yet (Firebase → Authentication → Sign-in method).';
     if (c === 'permission-denied') return 'You don’t have access to this data.';
+    if (c === 'auth/user-mismatch') return 'That’s a different Google account. Choose the account you want to delete.';
+    if (c === 'auth/requires-recent-login') return 'For your security, log out, log in again, then delete the account.';
     return 'Something went wrong. Try again.';
   };
 
@@ -78,6 +80,26 @@
     // Firebase emails a reset link. It never says whether the account exists (so nobody can probe emails).
     resetPassword: (email) => auth.sendPasswordResetEmail(email),
     resendVerification: () => (auth.currentUser ? auth.currentUser.sendEmailVerification() : Promise.resolve()),
+    // Permanently delete the signed-in account. Order matters:
+    // 1) confirm it's really the owner (Google popup, or the email account's password),
+    // 2) delete their database document (reminders, push devices) while still signed in,
+    //    because the rules only let a signed-in user delete their own document,
+    // 3) delete the login itself. Afterwards no emails or notifications are sent.
+    async deleteAccount(password) {
+      const u = auth.currentUser;
+      if (!u) throw { code: 'auth/no-current-user' };
+      const isEmail = (u.providerData[0] || {}).providerId === 'password';
+      if (isEmail) {
+        await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, password || ''));
+      } else {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account', login_hint: u.email || '' });
+        const res = await u.reauthenticateWithPopup(provider);
+        if (res.user.uid !== u.uid) throw { code: 'auth/user-mismatch' };
+      }
+      await ref(u.uid).delete();
+      await u.delete();
+    },
     signOut: () => (auth ? auth.signOut() : Promise.resolve()),
     // Calls cb(user | null) now and whenever the session changes (e.g. after a reload).
     onUser: (cb) => (auth ? auth.onAuthStateChanged((u) => cb(u ? toUser(u) : null)) : () => {}),

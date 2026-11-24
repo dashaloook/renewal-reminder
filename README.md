@@ -27,6 +27,8 @@ Coursework prototype. Reminders are stored in your browser (`localStorage`); the
 
 **Log out** signs you out of a real account and removes its reminders from that browser.
 
+**Delete account** (profile menu, real accounts only) permanently removes the account. A confirm window lists what goes (reminders with notes and history, reminder emails and notifications, the login) and reminds you that subscriptions themselves aren't cancelled. To make sure it's really the owner, Google accounts choose their Google account again and email accounts enter their password. The app then deletes the user's database document (allowed by the rules only for the signed-in owner) and finally the login itself. A wrong password or a closed Google window deletes nothing.
+
 ## How it's built
 
 | File | What it is |
