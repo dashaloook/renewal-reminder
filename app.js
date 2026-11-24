@@ -666,7 +666,7 @@ function ChannelNote({ r, ctx, on }) {
   return html`<div class="card pad20 col gap12" style=${{ width: '100%', textAlign: 'left', boxShadow: 'var(--shadow-s, 0 1px 2px rgba(22,19,43,.06))' }}>
     <b class="row gap8" style=${{ alignItems: 'flex-start' }}><span class="cb" style=${{ marginTop: 2 }}><${Icon} n="bell" c="s" /></span>Remind you on ${when}?</b>
     <span class="small c2">Browser notifications are off. Allow them and this browser will remind you about ${r.name} on ${when}${R.CLOUD_ACCOUNT ? ', even when the app is closed' : ''}.</span>
-    <div class="row"><${Btn} v="secondary" sm icon="bell" onClick=${ctx.enableNotifications}>Allow notifications<//></div>
+    <div class="row"><${Btn} v="ghost" sm icon="bell" style=${{ color: 'var(--brand)', marginLeft: -14 }} onClick=${ctx.enableNotifications}>Allow notifications<//></div>
   </div>`;
 }
 
