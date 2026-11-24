@@ -62,6 +62,8 @@ const Icon = ({ n, c = '', label, style }) => html`<svg class=${'icon ' + c} sty
 
 // Real accounts (Firebase): signed in with Google or with email + password.
 const isCloud = (a) => a === 'google' || a === 'email';
+// New reminders: real accounts get Email by default (works even when the browser is closed); the demo can't receive email, so it uses Browser.
+const defaultChannel = () => (R.CLOUD_ACCOUNT ? 'email' : 'browser');
 const Demo = () => R.CLOUD_ACCOUNT ? null : html`<span class="demo-tag" role="note" title="Demo mode: all data is for demonstration" aria-label="Demo mode: all data is for demonstration">Demo</span>`;
 const ServiceLink = ({ r }) => r.link
   ? html`<a class="link" href=${r.link} target="_blank" rel="noopener noreferrer" aria-label=${`Cancel on ${hostOf(r.link)} (opens in a new tab)`}>Cancel on ${hostOf(r.link)}<${Icon} n="external" c="xs" /></a>`
@@ -368,7 +370,7 @@ function Onboarding({ ctx }) {
     setTimeout(() => {
       const have = ctx.state.reminders.map((r) => r.name);
       const fresh = chosen.filter((s) => !have.includes(s.name));
-      ctx.update((s) => ({ onboarded: true, reminders: [...s.reminders, ...fresh.map((t, i) => ({ id: 'ob-' + uid(), name: t.name, category: t.category, amount: t.amount, cycle: t.cycle, date: R.off(5 + i * 4), remind: 7, channel: 'browser', note: '', status: 'active', reason: '', followUp: '', tone: t.tone, history: [{ type: 'created', date: R.iso(R.today()), text: 'Added during setup' }] }))] }));
+      ctx.update((s) => ({ onboarded: true, reminders: [...s.reminders, ...fresh.map((t, i) => ({ id: 'ob-' + uid(), name: t.name, category: t.category, amount: t.amount, cycle: t.cycle, date: R.off(5 + i * 4), remind: 7, channel: defaultChannel(), note: '', status: 'active', reason: '', followUp: '', tone: t.tone, history: [{ type: 'created', date: R.iso(R.today()), text: 'Added during setup' }] }))] }));
       ctx.showToast(fresh.length ? `${fresh.length} service${fresh.length > 1 ? 's' : ''} added to your list` : 'Your services are already in the list', fresh.length ? 'Check the charge dates in My reminders — prices and dates are estimates.' : 'Demo data already includes them.', null);
       go('dashboard');
     }, 600);
@@ -806,7 +808,7 @@ function DateField({ id, value, onChange, min, max, className = '', height, desc
 
 function CreateForm({ ctx, editId }) {
   const editing = editId && ctx.state.reminders.find((r) => r.id === editId);
-  const blank = { name: '', category: 'subscription', amount: '', cycle: 'monthly', date: '', remind: 7, channel: 'browser', note: '', link: '', tone: 'lavender' };
+  const blank = { name: '', category: 'subscription', amount: '', cycle: 'monthly', date: '', remind: 7, channel: defaultChannel(), note: '', link: '', tone: 'lavender' };
   const [f, setF] = useState(editing ? { ...editing, amount: editing.amount ? String(editing.amount) : '' } : blank);
   const [dirty, setDirty] = useState(false); const [errors, setErrors] = useState({}); const [saving, setSaving] = useState(false); const [done, setDone] = useState(null);
   const [q, setQ] = useState(''); const [open, setOpen] = useState(false); const [hi, setHi] = useState(0); const [tpl, setTpl] = useState(null);
