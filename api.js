@@ -8,7 +8,7 @@
   async function sendReminder(r) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
-    const reminder = { name: r.name, date: r.date, amount: Number(r.amount) || 0, cycle: r.cycle, daysLeft: window.RR.daysUntil(r.date) };
+    const reminder = { id: /^[A-Za-z0-9_-]{1,80}$/.test(r.id || '') ? r.id : undefined, name: r.name, date: r.date, amount: Number(r.amount) || 0, cycle: r.cycle, daysLeft: window.RR.daysUntil(r.date) };
     const token = window.RRCloud && window.RRCloud.enabled ? await window.RRCloud.idToken() : null;
     if (!token) throw new Error('Log in with Google or your email account to get reminder emails.');
     let res;

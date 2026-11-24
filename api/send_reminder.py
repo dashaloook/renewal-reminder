@@ -36,6 +36,7 @@ RATE_WINDOW = 60 * 10   # per 10 minutes, per IP
 _hits = {}
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")  # reminder ids are short tokens; nothing else goes into the link
 CYCLES = {"weekly": "week", "monthly": "month", "yearly": "year", "one-time": ""}
 
 
@@ -72,7 +73,10 @@ def _validate(data):
     days = r.get("daysLeft")
     if days is not None and (isinstance(days, bool) or not isinstance(days, int) or abs(days) > 3660):
         return None, "daysLeft must be a whole number."
-    return {"name": name.strip(), "date": date, "amount": float(amount), "cycle": cycle, "daysLeft": days}, None
+    rid = r.get("id")
+    if rid is not None and (not isinstance(rid, str) or not ID_RE.match(rid)):
+        return None, "Unknown reminder id."
+    return {"name": name.strip(), "date": date, "amount": float(amount), "cycle": cycle, "daysLeft": days, "id": rid}, None
 
 
 def _when(days):
@@ -98,6 +102,12 @@ def _nice_date(iso):
         return iso
 
 
+def reminder_link(r):
+    """Opens the app on this reminder's details (after sign-in if needed)."""
+    rid = r.get("id")
+    return f"{APP_URL}/?open={rid}&act=open#/dashboard" if rid and ID_RE.match(str(rid)) else f"{APP_URL}/#/dashboard"
+
+
 def build_email(r):
     """A plain, personal-looking email: spam filters dislike robotic subjects,
     'demo' wording, missing text versions and no way to stop the emails."""
@@ -111,7 +121,7 @@ def build_email(r):
     text = (f"Hi,\n\n{r['name']} renews {when + ' ' if when else ''}on {day}."
             + (f" Amount: {price}." if r["amount"] else "")
             + "\n\nDecide before the charge: keep it, cancel it on the service's website, or postpone the decision."
-            + f"\n\nOpen Renewal Reminder: {APP_URL}"
+            + f"\n\nOpen this reminder: {reminder_link(r)}"
             + "\n\nYou get this email because you set an email reminder for this renewal."
             + " To stop it, open the reminder in the app and switch it to Browser, or delete it.")
     body = f"""<!doctype html><html><body style="margin:0;padding:24px;background:#F6F5FB">
@@ -121,7 +131,7 @@ def build_email(r):
 <p style="margin:0 0 4px;font-size:15px">Charge date: <b>{html.escape(day)}</b></p>
 {f'<p style="margin:0 0 16px;font-size:15px">Amount: <b>{html.escape(price)}</b></p>' if r['amount'] else ''}
 <p style="margin:0 0 20px;font-size:15px">Decide before the charge: keep it, cancel it on the service’s website, or postpone the decision.</p>
-<p style="margin:0 0 24px"><a href="{APP_URL}/#/dashboard" style="background:#16132B;color:#fff;text-decoration:none;padding:12px 20px;border-radius:999px;font-size:14px;display:inline-block">Open Renewal Reminder</a></p>
+<p style="margin:0 0 24px"><a href="{html.escape(reminder_link(r))}" style="background:#16132B;color:#fff;text-decoration:none;padding:12px 20px;border-radius:999px;font-size:14px;display:inline-block">Open Renewal Reminder</a></p>
 <p style="margin:0;color:#6E7191;font-size:12px;line-height:1.5">You get this email because you set an email reminder for this renewal in Renewal Reminder. To stop it, open the reminder and switch it to Browser, or delete it.</p>
 </div></body></html>"""
     return subject, text, body

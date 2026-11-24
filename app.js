@@ -236,6 +236,16 @@ function App() {
     update(() => ({ authed: false })); go('login');
   };
 
+  // Saved an Email reminder on or after its reminder day? The 08:00 job has already run (or won't
+  // match), so send it now and mark it, so the job doesn't send the same reminder again today.
+  const emailIfDueNow = (r) => {
+    if (!isCloud(state.account) || r.channel !== 'email' || r.status === 'cancelled' || !window.RRApi) return;
+    const today = R.iso(R.today()); const n = R.daysUntil(r.date);
+    if (n < 0 || n > Number(r.remind) || r.emailedOn === today) return;
+    window.RRApi.sendReminder(r)
+      .then((d) => { update((s) => ({ reminders: s.reminders.map((x) => (x.id === r.id ? { ...x, emailedOn: today } : x)) })); showToast('Reminder email sent', `We emailed ${d.to} about ${r.name}. Check Spam if it’s not in your inbox.`, null); })
+      .catch((e) => showToast('Couldn’t send the reminder email', e.message, null));
+  };
   // Turn on real browser notifications for this device (asks the browser for permission).
   const enableNotifications = async () => {
     if (!pushApi) return;
@@ -260,7 +270,7 @@ function App() {
     try { localStorage.setItem('rr-notified', JSON.stringify(seen)); } catch (e) { /* ok */ }
   }, [notifOn, state.authed, state.reminders]);
 
-  const ctx = { state: view, update, decide, postpone, remove, upsert, openDrawer: setDrawer, openLater: setLater, showToast, reset, logout, signIn, auth, confirm: setConfirm, added, setAdded, demo: QS, setDemo, enableNotifications, openDeleteAccount: cloud ? () => setDelAccount(true) : null };
+  const ctx = { state: view, update, decide, postpone, remove, upsert, openDrawer: setDrawer, openLater: setLater, showToast, reset, logout, signIn, auth, confirm: setConfirm, added, setAdded, demo: QS, setDemo, enableNotifications, emailIfDueNow, openDeleteAccount: cloud ? () => setDelAccount(true) : null };
   // Opened from a notification: /?open=<reminder id>&act=keep|later|open. Handled once this
   // person's reminders have loaded (after sign-in too), then removed from the address.
   const fromNotif = useRef((() => { try { const q = new URLSearchParams(location.search); return q.get('open') ? { id: q.get('open'), act: q.get('act') || 'open' } : null; } catch (e) { return null; } })());
@@ -844,6 +854,7 @@ function CreateForm({ ctx, editId }) {
       const rec = { ...f, link: normUrl(f.link) || '', id: editing ? editing.id : uid(), name: f.name.trim(), amount: f.category === 'document' ? 0 : (isNaN(amountNum) ? 0 : amountNum), cycle: f.category === 'document' ? 'one-time' : f.cycle,
         status: editing ? editing.status : 'active', reason: editing ? editing.reason : '', followUp: editing ? editing.followUp : '', history: editing ? editing.history : [{ type: 'created', date: R.iso(R.today()), text: 'Created' }] };
       ctx.upsert(rec); setSaving(false); setDirty(false);
+      ctx.emailIfDueNow(rec);
       if (editing) { try { sessionStorage.setItem('rr-focus', rec.date); } catch (e) { /* ok */ } ctx.showToast(`${rec.name} saved`, rec.channel === 'email' ? (R.CLOUD_ACCOUNT ? `Reminder by email to ${R.USER.email}.` : 'Email reminders need a real account.') : (ctx.state.notif ? 'Reminder by notification in this browser.' : 'Turn on notifications to get the browser reminder.'), null); go('reminders'); }
       else { ctx.setAdded({ id: rec.id, date: rec.date, phase: 'popup' }); go('reminders'); }
     }, 800);

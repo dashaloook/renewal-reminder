@@ -62,6 +62,8 @@ Every morning at 08:00 Kyiv time (06:00 UTC) **Vercel Cron** runs `api/daily_rem
 2. picks the ones set to **Remind me … by Email** that are due today: exactly *N days before* the charge date (as chosen in the form), or a postponed reminder whose follow-up date is today; cancelled ones are skipped, monthly/yearly dates roll forward like in the app,
 3. sends each one to that user's **own confirmed address** from Firebase Authentication, through Brevo.
 
+If you save a reminder set to **Email** on or after its reminder day (after the 08:00 run), the app sends it right away and marks it (`emailedOn`), so the job doesn't send it twice that day. The **Open this reminder** button in every email links to `/?open=<id>&act=open`, which opens that reminder's details (after sign-in if needed).
+
 Security: only Vercel can start the job (it sends `CRON_SECRET`; other requests get 401). The job reads the database with a Firebase service-account key stored only in Vercel (`FIREBASE_SERVICE_ACCOUNT`, Secret), never in the code, GitHub or the browser. It only reads, never writes, and never takes the recipient from the database (users could edit that). Errors are logged without email addresses.
 
 **Which service sends the email:** [Brevo](https://www.brevo.com) (`BREVO_API_KEY` + `BREVO_SENDER`). Its free plan sends 300 emails a day to **every user's own address** without owning a domain; the sender address only has to be confirmed in Brevo. Optionally Gmail can send instead (`GMAIL_USER` + a Google App Password in `GMAIL_APP_PASSWORD`).

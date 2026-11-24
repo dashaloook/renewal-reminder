@@ -183,7 +183,8 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
 
     users = [u if len(u) == 3 else (u[0], u[1], []) for u in users]
     due = [(uid, r, d, n, subs) for uid, rs, subs in users for r in rs if isinstance(r, dict) for ok, d, n in [due_today(r, today)] if ok]
-    due_mail = [x for x in due if x[1].get("channel") == "email"] if only != "push" else []
+    # emailedOn = the app already sent this reminder today (saved on/after its reminder day).
+    due_mail = [x for x in due if x[1].get("channel") == "email" and x[1].get("emailedOn") != today.isoformat()] if only != "push" else []
     due_push = [x for x in due if x[1].get("channel") != "email"] if only != "email" else []
     emails = (lookup_fn or (lambda ids: lookup_emails(sa, token, ids)))(sorted({u for u, *_ in due_mail})) if due_mail else {}
     send, secret, sender, service = channel
@@ -200,7 +201,7 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
             summary["would_send"] = summary.get("would_send", 0) + 1
             continue
         amount = r.get("amount") or 0
-        subject, text, body = build_email({"name": str(r["name"])[:80], "date": d.isoformat(), "amount": float(amount) if isinstance(amount, (int, float)) else 0.0,
+        subject, text, body = build_email({"id": str(r.get("id", "")) or None, "name": str(r["name"])[:80], "date": d.isoformat(), "amount": float(amount) if isinstance(amount, (int, float)) else 0.0,
                                            "cycle": r.get("cycle") if r.get("cycle") in ("weekly", "monthly", "yearly", "one-time") else "monthly", "daysLeft": n})
         try:
             send(secret, sender, to, subject, text, body)
