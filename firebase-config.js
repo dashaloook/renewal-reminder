@@ -7,7 +7,7 @@ window.RR_FIREBASE_CONFIG = {
   apiKey: 'AIzaSyA7XpUu145kJ_gs5LUi0ShqhU06FzuwJss',
   // Our own address, so Google's sign-in window says renewduck.vercel.app. vercel.json passes
   // /__/auth/* through to Firebase; the address is registered in Google Cloud → Credentials.
-  authDomain: 'renewduck.vercel.app',
+  authDomain: 'renewal-reminder-33e59.firebaseapp.com',
   projectId: 'renewal-reminder-33e59',
   storageBucket: 'renewal-reminder-33e59.firebasestorage.app',
   messagingSenderId: '833438435146',
