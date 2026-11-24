@@ -1,6 +1,6 @@
 # Renewal Reminder
 
-**Live:** https://renewal-reminder-one.vercel.app · **Code:** https://github.com/dashaloook/renewal-reminder
+**Live:** https://renewduck.vercel.app · **Code:** https://github.com/dashaloook/renewal-reminder
 
 A browser app that helps you decide about subscriptions and other renewals before you're charged: keep it, cancel it, or decide later with a reason, and get reminded again.
 

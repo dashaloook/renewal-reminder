@@ -87,7 +87,7 @@ def _when(days):
     return f"{-days} days ago"
 
 
-APP_URL = os.environ.get("APP_URL", "https://renewal-reminder-one.vercel.app")
+APP_URL = os.environ.get("APP_URL", "https://renewduck.vercel.app")
 
 
 def _nice_date(iso):

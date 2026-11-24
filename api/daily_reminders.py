@@ -225,7 +225,7 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
                 summary["would_push"] = summary.get("would_push", 0) + 1
                 continue
             try:
-                push({"endpoint": sub["endpoint"], "keys": sub["keys"]}, payload, vapid, env.get("VAPID_SUBJECT", "").strip() or "https://renewal-reminder-one.vercel.app")
+                push({"endpoint": sub["endpoint"], "keys": sub["keys"]}, payload, vapid, env.get("VAPID_SUBJECT", "").strip() or "https://renewduck.vercel.app")
                 summary["push_sent"] += 1
             except Exception as e:
                 code = getattr(getattr(e, "response", None), "status_code", None)
