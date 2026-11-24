@@ -143,7 +143,7 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
     channel = mail_channel(env)
     raw = env.get("FIREBASE_SERVICE_ACCOUNT", "").strip()
     if not raw or not channel:
-        return 503, {"error": "Not set up: add FIREBASE_SERVICE_ACCOUNT and an email service (Gmail or Resend) in Vercel."}
+        return 503, {"error": "Not set up: add FIREBASE_SERVICE_ACCOUNT and an email service (BREVO_API_KEY + BREVO_SENDER) in Vercel."}
     try:
         sa = json.loads(raw)
     except ValueError:

@@ -1,10 +1,10 @@
-"""POST /api/send_reminder — sends one renewal reminder email through Resend.
+"""POST /api/send_reminder — sends one renewal reminder email through Brevo (or Gmail).
 
 Runs as a Vercel Python serverless function, and locally through dev_server.py.
 
 Security model
-- Emails go out through Gmail (GMAIL_USER + GMAIL_APP_PASSWORD), else Brevo
-  (BREVO_API_KEY + BREVO_SENDER), else Resend (RESEND_API_KEY). The secrets are read from
+- Emails go out through Brevo (BREVO_API_KEY + BREVO_SENDER), or through Gmail
+  (GMAIL_USER + GMAIL_APP_PASSWORD) if those are set. The secrets are read from
   environment variables on the server. It is never sent to the browser and never written in the code.
 - The email goes to the signed-in person's own, confirmed address (Google or
   email account). The browser
@@ -14,7 +14,7 @@ Security model
 - Input is validated and HTML-escaped before it goes into the email.
 - A small per-IP rate limit slows down abuse (best effort: it lives in one
   server instance's memory).
-- Errors from Resend are logged on the server; the browser only gets a short,
+- Errors from the email service are logged on the server; the browser only gets a short,
   safe message.
 """
 
@@ -27,7 +27,6 @@ import time
 import urllib.error
 import urllib.request
 
-RESEND_URL = "https://api.resend.com/emails"
 LOOKUP_URL = "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key="
 # Public Firebase web key (same as firebase-config.js; not a secret). Override with FIREBASE_API_KEY.
 DEFAULT_FIREBASE_KEY = "AIzaSyA7XpUu145kJ_gs5LUi0ShqhU06FzuwJss"
@@ -110,17 +109,6 @@ def build_email(r):
     return subject, text, body
 
 
-def _send(api_key, sender, to, subject, text, body):
-    payload = json.dumps({"from": sender, "to": [to], "subject": subject, "text": text, "html": body}).encode()
-    req = urllib.request.Request(RESEND_URL, data=payload, method="POST", headers={
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "User-Agent": "renewal-reminder/1.0",
-    })
-    with urllib.request.urlopen(req, timeout=10) as res:
-        return json.loads(res.read() or b"{}")
-
-
 def _send_gmail(app_password, sender, to, subject, text, body):
     """Send through Gmail (SMTP) with a Google App Password. Reaches any address."""
     import smtplib
@@ -153,7 +141,7 @@ def _send_brevo(api_key, sender, to, subject, text, body):
 
 
 def mail_channel(env):
-    """Which email service to use: Gmail, then Brevo, then Resend — the first one that is set up.
+    """Which email service to use: Gmail if its secrets are set, else Brevo.
     Returns (send_fn, secret, sender, name) or None if neither is set up."""
     g_user = env.get("GMAIL_USER", "").strip()
     g_pass = env.get("GMAIL_APP_PASSWORD", "").replace(" ", "").strip()
@@ -162,9 +150,6 @@ def mail_channel(env):
     b_key, b_from = env.get("BREVO_API_KEY", "").strip(), env.get("BREVO_SENDER", "").strip()
     if b_key and b_from:
         return _send_brevo, b_key, f"Renewal Reminder <{b_from}>", "brevo"
-    key = env.get("RESEND_API_KEY", "").strip()
-    if key:
-        return _send, key, env.get("RESEND_FROM", "").strip() or "Renewal Reminder <onboarding@resend.dev>", "resend"
     return None
 
 
@@ -179,13 +164,11 @@ def friendly_send_error(e):
         return "Gmail couldn’t deliver to this address.", None
     if isinstance(e, urllib.error.HTTPError):
         detail = e.read()[:500].decode("utf-8", "replace")
-        print(f"[mail] {'Brevo' if 'brevo' in (e.url or '') else 'Resend'} HTTP {e.code}: {detail}")
+        print(f"[mail] Brevo HTTP {e.code}: {detail}")
         if "sender" in detail.lower() and ("valid" in detail.lower() or "verif" in detail.lower()):
             return "The email service doesn’t accept the sender yet. Confirm BREVO_SENDER in Brevo → Senders.", None
         if "not yet activated" in detail.lower() or "account" in detail.lower() and "activ" in detail.lower():
             return "The Brevo account isn’t activated for sending yet. Check Brevo for an activation message.", None
-        if "your own email" in detail.lower() or "verify a domain" in detail.lower():
-            return "The email service’s free plan can only email the app owner. To email everyone, the owner must verify a domain in Resend.", "owner_only"
         if "api key" in detail.lower() or "key not found" in detail.lower() or e.code == 401:
             return "The email service rejected the server’s API key. Check the key in Vercel.", None
         return "The email service couldn’t send this email.", None

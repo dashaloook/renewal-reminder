@@ -76,6 +76,6 @@ class Dev(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5173
-    configured = bool(ENV.get("RESEND_API_KEY")) and bool(ENV.get("REMINDER_TO_EMAIL"))
+    configured = bool(ENV.get("BREVO_API_KEY") and ENV.get("BREVO_SENDER")) or bool(ENV.get("GMAIL_USER") and ENV.get("GMAIL_APP_PASSWORD"))
     print(f"Renewal Reminder on http://localhost:{port}  (email {'configured' if configured else 'NOT configured: copy .env.example to .env.local'})")
     ThreadingHTTPServer(("127.0.0.1", port), Dev).serve_forever()
