@@ -406,6 +406,6 @@ textarea.input{line-height:1.5}
 .rrow .reason-inline{display:none}
 @media (max-width:1180px){.rrow .reason-inline{display:flex}}
 /* Date and status columns read from the left (badge + reason start at the column edge) */
-.rrow .when{justify-self:start}
+.rrow .when{justify-self:center;width:auto;min-width:120px}
 .rrow .st{justify-self:start;align-items:flex-start}
 .rrow .st-reason{text-align:left}
