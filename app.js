@@ -52,6 +52,7 @@ const P = {
   reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  note: '<path d="M8 2v4"/><path d="M12 2v4"/><path d="M16 2v4"/><path d="M11 22H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5"/><path d="M4 9h16"/><path d="M8 13h6"/><path d="M8 17h3"/><path d="M21.4 14.6a1.5 1.5 0 0 0-2.1-2.1L14 17.8V20h2.2z"/>',
   pencil: '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
   lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
@@ -165,8 +166,11 @@ function App() {
   const reminders = QS === 'empty' ? [] : state.reminders;
   // Notifications count as "on" only if the browser really allows them on this device.
   const pushApi = window.RRPush;
-  const notifOn = !!state.notif && !!pushApi && pushApi.permission() === 'granted';
-  const view = { ...state, reminders, notif: notifOn };
+  // On = this browser already allows notifications (also when allowed earlier, before this account);
+  // blocked = the person said "Block", so a button can't help — we explain how to unblock instead.
+  const notifPerm = pushApi ? pushApi.permission() : 'unsupported';
+  const notifOn = notifPerm === 'granted';
+  const view = { ...state, reminders, notif: notifOn, notifBlocked: notifPerm === 'denied' };
   const update = (fn) => setState((s) => ({ ...s, ...fn(s) }));
 
   // reopen = the reminder whose details were open when the action happened; Undo opens it again.
@@ -543,7 +547,7 @@ function Dashboard({ ctx }) {
   if (!list.length) return html`<div class="col gap4"><h1 class="h1">Welcome, ${R.USER.first}</h1><p class="body-l c2" style=${{ margin: 0 }}>Let’s add the first thing you don’t want to renew by accident.</p></div><${EmptyState} />`;
   return html`
     <div class="page-head"><div class="col gap4"><h1 class="h1">${greet}, ${R.USER.first}</h1><p class="body-l c2" style=${{ margin: 0 }}>${dateStr} · ${unfinished.length ? `${unfinished.length} decision${unfinished.length > 1 ? 's are' : ' is'} waiting for you` : 'nothing is waiting for you'}</p></div><${Btn} sm icon="plus" class="ph-add" onClick=${() => go('new')}>Add reminder<//></div>
-    ${!state.notif && !state.bannerDismissed && html`<div class="banner" role="region" aria-label="Notifications are off"><span class="ic"><${Icon} n="bell-off" /></span><div class="grow"><b>Turn on notifications so you don’t miss a renewal</b><div class="c2">Browser notifications are off. We only notify you about reminders you set.</div></div>
+    ${!state.notif && !state.notifBlocked && !state.bannerDismissed && html`<div class="banner" role="region" aria-label="Notifications are off"><span class="ic"><${Icon} n="bell-off" /></span><div class="grow"><b>Turn on notifications so you don’t miss a renewal</b><div class="c2">Browser notifications are off. We only notify you about reminders you set.</div></div>
       <${Btn} sm onClick=${ctx.enableNotifications}>Turn on<//><${Btn} v="ghost" sm onClick=${() => ctx.update(() => ({ bannerDismissed: true }))}>Dismiss<//></div>`}
     <section class="hero" aria-labelledby="ud-h">
       <div class="row gap12"><h2 class="h2" id="ud-h">Unfinished decisions</h2>${unfinished.length > 0 && html`<span class="badge t-brand"><${Icon} n="hourglass" />${unfinished.length} waiting</span>`}<span class="grow"></span><a class="link" href="#/reminders?f=unfinished" onClick=${(e) => { e.preventDefault(); sessionStorage.setItem('rr-filter', 'unfinished'); go('reminders'); }}>View all</a></div>
@@ -588,11 +592,11 @@ function MonthBars({ data }) {
   </svg><span class="small c3">Peaks in ${peak.join(' and ')}.</span>
   <table class="sr-only"><caption>Charges per month</caption><tbody>${data.map((d) => html`<tr><th>${d.long}</th><td>${money(d.value)}</td></tr>`)}</tbody></table></div>`;
 }
-// The reminder's own note, shown as a short quoted line (full text on hover and in the details).
-const NoteLine = ({ note, row }) => (note && note.trim()) ? html`<span class=${'note-line' + (row ? ' in-row' : '')} title=${note}><${Icon} n="pencil" c="xs" /><span class="note-txt">${note.trim()}</span></span>` : null;
+// The reminder's own note. row = list (2 lines max), card = Added/Saved card (own section under a divider).
+const NoteLine = ({ note, row, card }) => (note && note.trim()) ? html`<div class=${'note-line' + (row ? ' in-row' : '') + (card ? ' in-card' : '')} title=${row ? note : undefined}><${Icon} n="note" c="xs" /><span class="note-txt">${note.trim()}</span></div>` : null;
 function Row({ r, ctx, isNew }) {
   return html`<button class=${'rrow' + (isNew ? ' is-new' : '')} onClick=${() => ctx.openDrawer(r.id)} aria-label=${`${isNew ? 'New reminder, ' : ''}${r.name}, ${amountLine(r)}, ${fmt(r.date)}, ${rel(R.daysUntil(r.date))}, ${r.status === 'unfinished' ? 'unfinished decision: ' + r.reason : r.status}${r.note ? ', note: ' + r.note : ''}`}>
-    <${Logo} r=${r} /><span class="nm grow col" style=${{ gap: 2 }}><b class="h3" style=${{ fontSize: 16 }}>${r.name}</b><span class="c2">${cat(r.category).one}</span><${NoteLine} note=${r.note} row />${r.status === 'unfinished' && html`<span class="small cb row gap4"><${Icon} n="hourglass" c="xs" />Postponed: ${r.reason}</span>`}${(isNew || r.status === 'kept' || r.status === 'cancelled') && html`<span class="st-inline">${isNew ? html`<span class="badge t-brand">New</span>` : html`<${StatusBadge} r=${r} />`}</span>`}</span>
+    <${Logo} r=${r} /><span class="nm grow col" style=${{ gap: 2 }}><span class="nm-line"><b class="h3" style=${{ fontSize: 16 }}>${r.name}</b><span class="nm-cat">/ ${cat(r.category).one}</span></span><${NoteLine} note=${r.note} row />${r.status === 'unfinished' && html`<span class="small cb row gap4"><${Icon} n="hourglass" c="xs" />Postponed: ${r.reason}</span>`}${(isNew || r.status === 'kept' || r.status === 'cancelled') && html`<span class="st-inline">${isNew ? html`<span class="badge t-brand">New</span>` : html`<${StatusBadge} r=${r} />`}</span>`}</span>
     <span class="amt"><b class="h3" style=${{ fontSize: 16, display: 'block' }}>${r.amount ? money(r.amount) : '—'}</b><span class="small c3">${r.category === 'document' ? 'Expires' : cyc(r.cycle).label}</span><span class="mob-badge"><${UrgBadge} r=${r} /></span></span>
     <span class="when"><span class="date">${fmt(r.date)}</span><${UrgBadge} r=${r} /></span><span class="st">${isNew ? html`<span class="badge t-brand">New</span>` : html`<${StatusBadge} r=${r} />`}</span><span class="chev c3"><${Icon} n="chevron-right" /></span>
   </button>`;
@@ -628,7 +632,7 @@ function Drawer({ r, ctx, onClose }) {
         <div><dt>Amount</dt><dd>${amountLine(r)}</dd></div>${r.amount > 0 && r.cycle !== 'one-time' && html`<div><dt>Per year</dt><dd>${money(R.monthlyEq({ ...r, status: 'active' }) * 12)}</dd></div>`}
         <div><dt>${r.category === 'document' ? 'Expires' : 'Next charge'}</dt><dd>${fmt(r.date, { day: 'numeric', month: 'long', year: 'numeric' })} (${rel(n).toLowerCase()})</dd></div>
         <div><dt>Remind me</dt><dd>${remindTxt(r.remind)} · ${r.channel === 'email' ? 'Email' : 'Browser'}</dd></div>
-        <div><dt>Note</dt><dd>${r.note || '—'}</dd></div></dl>
+        ${r.note && r.note.trim() ? html`<div class="note-row"><dt>Note</dt><dd><${Icon} n="note" c="xs" /><span>${r.note.trim()}</span></dd></div>` : html`<div><dt>Note</dt><dd>—</dd></div>`}</dl>
       ${r.status !== 'cancelled' && (r.channel === 'email' ? html`<div class="col" style=${{ gap: 8 }}><b>Email reminder</b>
         ${R.CLOUD_ACCOUNT ? html`<span class="small c2">On the reminder day we email <b>${R.USER.email}</b>. Send yourself a test now to see it.</span>
         <div><${Btn} v="secondary" sm icon="mail" loading=${mail.s === 'sending'} onClick=${sendTest}>${mail.s === 'sending' ? 'Sending…' : 'Send test email'}<//></div>`
@@ -637,6 +641,7 @@ function Drawer({ r, ctx, onClose }) {
       : html`<div class="col" style=${{ gap: 8 }}><b>Browser notification</b>
         ${ctx.state.notif ? html`<span class="small c2">On the reminder day this browser shows a notification${R.CLOUD_ACCOUNT ? ', even if the app is closed' : ' while the app is open'}.</span>
           <div><${Btn} v="secondary" sm icon="bell" onClick=${testNotif}>Send test notification<//></div>`
+        : ctx.state.notifBlocked ? html`<span class="small c2">Notifications are blocked for this site. To get reminders here, allow them in your browser’s site settings — the icon to the left of the address.</span>`
         : html`<span class="small c2">Notifications are off on this device, so we can’t remind you here.</span>
           <div><${Btn} v="secondary" sm icon="bell" onClick=${ctx.enableNotifications}>Turn on notifications<//></div>`}
         <span aria-live="polite">${mail.s === 'notif' ? html`<span class="msg ok"><${Icon} n="circle-check" c="xs" />${mail.msg}</span>` : mail.s === 'notif-err' ? html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${mail.msg}</span>` : ''}</span></div>`)}
@@ -661,7 +666,7 @@ function AddedDialog({ r, ctx }) {
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="ad-h" ref=${ref} style=${{ width: 520, alignItems: 'center', textAlign: 'center' }}>
     <span class="logo lg" style=${{ background: 'var(--success-subtle)', color: 'var(--success)' }}><${Icon} n="circle-check" /></span>
     <h2 class="h2" id="ad-h">Added. We’ll remind you on ${fmt(remindOn)}</h2>
-    <div class="row gap12" style=${{ padding: 16, background: 'var(--subtle)', borderRadius: 12, width: '100%', textAlign: 'left' }}><${Logo} r=${r} /><div class="grow" style=${{ minWidth: 0 }}><b>${r.name} · ${amountLine(r)}</b><div class="small c3">${r.category === 'document' ? 'Expires' : 'Renews'} ${fmt(r.date)} · reminder ${remindTxt(r.remind)}, ${r.channel === 'email' ? 'by email' : 'in the browser'}</div><${NoteLine} note=${r.note} /></div></div>
+    <div class="col" style=${{ padding: 16, background: 'var(--subtle)', borderRadius: 12, width: '100%', textAlign: 'left' }}><div class="row gap12"><${Logo} r=${r} /><div class="grow" style=${{ minWidth: 0 }}><b>${r.name} · ${amountLine(r)}</b><div class="small c3">${r.category === 'document' ? 'Expires' : 'Renews'} ${fmt(r.date)} · reminder ${remindTxt(r.remind)}, ${r.channel === 'email' ? 'by email' : 'in the browser'}</div></div></div><${NoteLine} note=${r.note} card /></div>
     <${ChannelNote} r=${r} ctx=${ctx} on=${remindOn} />
     <p class="c2" style=${{ margin: 0 }}>It’s already on your dashboard and in your list.${total ? ` Your monthly total is now ${money(total)}.` : ''}</p>
     <div class="row wrap" style=${{ justifyContent: 'center' }}><${Btn} v="secondary" icon="plus" onClick=${another}>Add another<//><${Btn} iconR="arrow-right" data-autofocus onClick=${toList}>Go to my list<//></div>
@@ -675,7 +680,8 @@ function ChannelNote({ r, ctx, on }) {
   if (r.channel === 'email') return R.CLOUD_ACCOUNT
     ? box('mail', 'ok', html`<b>Email reminder is set.</b> We’ll email <b>${R.USER.email}</b> on ${when}. If it isn’t in your inbox, check Spam and mark it “Not spam”.`)
     : box('info', 'warn', html`<b>Email reminders need a real account.</b> Log in with Google or your email account and we’ll email you on ${when}.`);
-  if (ctx.state.notif) return box('bell', 'ok', html`<b>Browser notification is set.</b> This browser will show a notification on ${when}${R.CLOUD_ACCOUNT ? ', even if the app is closed' : ' while the app is open'}.`);
+  if (ctx.state.notif) return box('bell', 'ok', html`<b>You’re all set.</b> Notifications are already on in this browser, so we’ll remind you here on ${when}${R.CLOUD_ACCOUNT ? ' — even if the app is closed' : ''}.`);
+  if (ctx.state.notifBlocked) return box('bell-off', 'warn', html`<b>Notifications are blocked for this site.</b> To get this reminder on ${when}, allow them in your browser’s site settings — the icon to the left of the address.`);
   // Same look as the "Remind you…?" card on the form: clear question + a real button.
   return html`<div class="card pad20 col gap12" style=${{ width: '100%', textAlign: 'left', boxShadow: 'var(--shadow-s, 0 1px 2px rgba(22,19,43,.06))' }}>
     <b class="row"><span class="cb"><${Icon} n="bell" c="s" /></span>Remind you on ${when}?</b>
@@ -867,7 +873,7 @@ function CreateForm({ ctx, editId }) {
     return html`<div class="card col gap16" style=${{ maxWidth: 560, margin: '40px auto', padding: 40, alignItems: 'center', textAlign: 'center', boxShadow: 'var(--shadow-m)', border: 0 }} role="status">
       <span class="logo lg" style=${{ background: 'var(--success-subtle)', color: 'var(--success)' }}><${Icon} n="circle-check" /></span>
       <h1 class="h2">${editing ? 'Saved.' : 'Added.'} We’ll remind you on ${fmt(R.daysUntil(rd) < 0 ? R.iso(R.today()) : rd)}</h1>
-      <div class="row gap12" style=${{ padding: 16, background: 'var(--subtle)', borderRadius: 12, width: '100%', textAlign: 'left' }}><${Logo} r=${done} /><div class="grow" style=${{ minWidth: 0 }}><b>${done.name} · ${amountLine(done)}</b><div class="small c3">${done.category === 'document' ? 'Expires' : 'Renews'} ${fmt(done.date)} · reminder ${remindTxt(done.remind)}, ${done.channel === 'email' ? 'by email' : 'in the browser'}</div><${NoteLine} note=${done.note} /></div></div>
+      <div class="col" style=${{ padding: 16, background: 'var(--subtle)', borderRadius: 12, width: '100%', textAlign: 'left' }}><div class="row gap12"><${Logo} r=${done} /><div class="grow" style=${{ minWidth: 0 }}><b>${done.name} · ${amountLine(done)}</b><div class="small c3">${done.category === 'document' ? 'Expires' : 'Renews'} ${fmt(done.date)} · reminder ${remindTxt(done.remind)}, ${done.channel === 'email' ? 'by email' : 'in the browser'}</div></div></div><${NoteLine} note=${done.note} card /></div>
       <${ChannelNote} r=${done} ctx=${ctx} on=${R.daysUntil(rd) < 0 ? R.iso(R.today()) : rd} />
       <p class="c2" style=${{ margin: 0 }}>It’s already on your dashboard and in your list.</p>
       <div class="row wrap" style=${{ justifyContent: 'center' }}><${Btn} v="secondary" icon="plus" onClick=${() => { setDone(null); setF(blank); setTpl(null); go('new'); }}>Add another<//><${Btn} iconR="arrow-right" data-autofocus onClick=${() => { try { sessionStorage.setItem('rr-focus', done.date); } catch (e) { /* ok */ } go('reminders'); }}>Go to my list<//></div></div>`;
@@ -917,8 +923,12 @@ function CreateForm({ ctx, editId }) {
         <p class="body-l" style=${{ margin: 0 }}>${f.name && f.date ? (isDoc ? `${f.name} expires on ${fmt(f.date)}. ` : `${f.name} renews on ${fmt(f.date)}${f.amount && !amountBad ? `, ${money(amountNum)}` : ''}. `) + `We’ll remind you on ${fmt(remindDate)}.` : 'Add a name and date to see your reminder here.'}</p>
         ${f.date && html`<div class="col gap12">${[['circle-check', 'Reminder set', 'Today'], ['bell', `We remind you (${f.channel === 'email' ? 'email' : 'browser'})`, fmt(remindDate)], ['calendar', `${f.name || 'It'} ${isDoc ? 'expires' : 'renews'}${f.amount && !isDoc && !amountBad ? ' · ' + money(amountNum) : ''}`, fmt(f.date)]].map(([ic, l, d]) => html`<div class="row gap12"><span class="cb"><${Icon} n=${ic} c="s" /></span><div><div>${l}</div><div class="small c3">${d}</div></div></div>`)}</div>`}
       </div>
-      ${!ctx.state.notif && html`<div class="card pad20 col gap12"><b class="row"><span class="cb"><${Icon} n="bell" c="s" /></span>Remind you ${remindTxt(f.remind)}${f.name ? ` ${f.name} renews` : ''}?</b><span class="small c2">Browser notifications are off. You can still save without them — we’ll show it on your dashboard.</span>
-        <div class="row"><${Btn} v="secondary" sm onClick=${ctx.enableNotifications}>Allow notifications<//><${Btn} v="ghost" sm onClick=${() => ctx.update(() => ({ bannerDismissed: true, notif: false }))}>Not now<//></div></div>`}
+      ${f.channel !== 'email' && (ctx.state.notif
+        ? html`<div class="card pad20 row gap12" style=${{ alignItems: 'flex-start' }}><span class="cb" style=${{ marginTop: 2 }}><${Icon} n="bell" c="s" /></span><div class="col" style=${{ gap: 4 }}><b>Notifications are on</b><span class="small c2">You allowed them in this browser earlier, so this reminder will reach you here${R.CLOUD_ACCOUNT ? ' — even when the app is closed' : ''}.</span></div></div>`
+        : ctx.state.notifBlocked
+        ? html`<div class="card pad20 col gap12"><b class="row"><span class="cb"><${Icon} n="bell-off" c="s" /></span>Notifications are blocked</b><span class="small c2">Notifications are blocked for this site. To get reminders here, allow them in your browser’s site settings — the icon to the left of the address. You can still save — it will show on your dashboard.</span></div>`
+        : html`<div class="card pad20 col gap12"><b class="row"><span class="cb"><${Icon} n="bell" c="s" /></span>Remind you ${remindTxt(f.remind)}${f.name ? ` ${f.name} renews` : ''}?</b><span class="small c2">Browser notifications are off. You can still save without them — we’ll show it on your dashboard.</span>
+        <div class="row"><${Btn} v="secondary" sm onClick=${ctx.enableNotifications}>Allow notifications<//><${Btn} v="ghost" sm onClick=${() => ctx.update(() => ({ bannerDismissed: true, notif: false }))}>Not now<//></div></div>`)}
     </aside>
   </form>`;
 }
