@@ -468,7 +468,7 @@ function Drawer({ r, ctx, onClose }) {
   const [mail, setMail] = useState({ s: 'idle', msg: '' });
   const sendTest = async () => {
     setMail({ s: 'sending', msg: '' });
-    try { await window.RRApi.sendReminder(r); setMail({ s: 'sent', msg: 'Sent. Check your inbox (and spam).' }); ctx.showToast(`Test email sent for ${r.name}`, 'It went to the address set on the server.', null); }
+    try { const d = await window.RRApi.sendReminder(r); setMail({ s: 'sent', msg: `Sent to ${d.to}. Check your inbox (and spam).` }); ctx.showToast(`Test email sent for ${r.name}`, `It went to ${d.to}.`, null); }
     catch (e) { setMail({ s: 'error', msg: e.message }); }
   };
   return html`<div class="scrim" onClick=${onClose}></div>
@@ -489,8 +489,9 @@ function Drawer({ r, ctx, onClose }) {
         <div><dt>Remind me</dt><dd>${remindTxt(r.remind)} · ${r.channel === 'email' ? 'Email' : 'Browser'}</dd></div>
         <div><dt>Note</dt><dd>${r.note || '—'}</dd></div></dl>
       ${r.status !== 'cancelled' && html`<div class="col" style=${{ gap: 8 }}><b>Email reminder</b>
-        <span class="small c2">Send yourself the email you’d get before ${r.name} renews.</span>
-        <div><${Btn} v="secondary" sm icon="mail" loading=${mail.s === 'sending'} onClick=${sendTest}>${mail.s === 'sending' ? 'Sending…' : 'Send test email'}<//></div>
+        ${R.CLOUD_ACCOUNT ? html`<span class="small c2">Send yourself the email you’d get before ${r.name} renews. It goes to ${R.USER.email}.</span>
+        <div><${Btn} v="secondary" sm icon="mail" loading=${mail.s === 'sending'} onClick=${sendTest}>${mail.s === 'sending' ? 'Sending…' : 'Send test email'}<//></div>`
+        : html`<span class="small c2">Emails go to your own Google address. Sign in with Google to get them.</span>`}
         <span aria-live="polite">${mail.s === 'sent' ? html`<span class="msg ok"><${Icon} n="circle-check" c="xs" />${mail.msg}</span>` : mail.s === 'error' ? html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${mail.msg}</span>` : ''}</span></div>`}
       <div class="col gap12"><b>History</b>${[...r.history].reverse().map((h) => html`<div class="row gap12"><span class="logo sm" style=${{ background: 'var(--subtle)', color: 'var(--text-2)' }}><${Icon} n=${{ created: 'plus', reminded: 'bell', postponed: 'hourglass', cancelled: 'x', kept: 'check', edited: 'pencil' }[h.type] || 'info'} c="xs" /></span><div><div>${h.text}</div><div class="small c3">${fmt(h.date)}</div></div></div>`)}</div>
     </div>

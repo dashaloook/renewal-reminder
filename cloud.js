@@ -55,6 +55,8 @@
       const res = await auth.signInWithPopup(provider);
       return res.user ? toUser(res.user) : null;
     },
+    // Fresh Google sign-in token for our own server (proves who is asking). null if signed out.
+    idToken: () => (auth && auth.currentUser ? auth.currentUser.getIdToken() : Promise.resolve(null)),
     signOut: () => (auth ? auth.signOut() : Promise.resolve()),
     // Calls cb(user | null) now and whenever the session changes (e.g. after a reload).
     onUser: (cb) => (auth ? auth.onAuthStateChanged((u) => cb(u ? toUser(u) : null)) : () => {}),

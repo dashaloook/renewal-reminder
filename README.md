@@ -44,13 +44,14 @@ For the simulated email login, any password works. Use the password `wrong` to s
 No build step.
 
 ```
-Browser ──POST /api/send_reminder──▶ our function ──(RESEND_API_KEY)──▶ Resend ──▶ inbox
-          (name, date, amount)        validates, builds email
+Browser ──POST /api/send_reminder──▶ our function ──(RESEND_API_KEY)──▶ Resend ──▶ the user's own inbox
+  (reminder + Google sign-in token)    checks the token with Google,
+                                       takes the email from it, builds email
 ```
 
 ## Run locally
 
-1. Copy `.env.example` to `.env.local` and fill in `RESEND_API_KEY` and `REMINDER_TO_EMAIL`.
+1. Copy `.env.example` to `.env.local` and fill in `RESEND_API_KEY`.
 2. Run `python3 dev_server.py` and open http://localhost:5173
 
 Without `.env.local` everything works except email: the button explains that email isn't set up. For testing, `?state=empty|loading|error` in the URL forces a state.
@@ -59,16 +60,17 @@ Without `.env.local` everything works except email: the button explains that ema
 
 Import the repository in Vercel (**Add New → Project**), no build settings needed. Every push to `main` redeploys.
 
-In **Settings → Environment Variables** add `RESEND_API_KEY` and `REMINDER_TO_EMAIL` as **Secret** (optionally `ALLOWED_ORIGIN` = the site URL), then redeploy.
+In **Settings → Environment Variables** add `RESEND_API_KEY` as **Secret** (optionally `ALLOWED_ORIGIN` = the site URL), then redeploy.
 
 ## Security: how the key is protected
 
 - **The key lives only in environment variables**: `.env.local` on my computer and Vercel's encrypted Secret variables online. It is not in any code file.
 - **It never reaches GitHub**: `.gitignore` excludes `.env`, `.env.local` and `.env.*.local`. The repository only has `.env.example` with empty values, so others know which variables to set.
 - **It never reaches the browser**: only the server function reads `RESEND_API_KEY`. The browser calls `/api/send_reminder`; the key isn't in the page source, `app.js` or network requests.
-- **The endpoint can't be used for spam**: the recipient is fixed on the server (`REMINDER_TO_EMAIL`); the browser can't choose who gets the email.
+- **Each person gets only their own emails**: the email button exists only for Google accounts. The browser sends its Firebase sign-in token; the server asks Google who it belongs to and sends to that verified address. The browser can't choose the recipient, so the endpoint can't be used to email strangers, and one user never receives another user's reminders. Demo and email-login accounts don't get emails.
+- **Free-plan limit**: Resend's free test sender (`onboarding@resend.dev`) only delivers to the Resend account owner. To email every user, verify a domain in Resend and set `RESEND_FROM` (e.g. `Renewal Reminder <hi@yourdomain.com>`). Until then, other users see a clear message instead of an email.
 - **Input is checked**: name length, date format, amount range and request size are validated; text is HTML-escaped before it goes into the email.
-- **Abuse is slowed down**: 5 emails per 10 minutes per IP, and optionally only requests from my own site (`ALLOWED_ORIGIN`).
+- **Abuse is slowed down**: 5 emails per 10 minutes per user, and optionally only requests from my own site (`ALLOWED_ORIGIN`).
 - **Errors don't leak details**: the email service's error replies are logged on the server; the browser gets a short message.
 - **Private files aren't served**: `.vercelignore` keeps `dev_server.py` and env files off the public site.
 - **If a key ever leaks**: revoke it in Resend, create a new one, and update it in Vercel.

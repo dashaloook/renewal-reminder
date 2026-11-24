@@ -5,8 +5,10 @@ Runs as a Vercel Python serverless function, and locally through dev_server.py.
 Security model
 - The Resend key is read from the RESEND_API_KEY environment variable on the
   server. It is never sent to the browser and never written in the code.
-- The recipient is fixed on the server (REMINDER_TO_EMAIL). The browser can't
-  choose who gets the email, so the endpoint can't be used to spam strangers.
+- The email goes to the signed-in person's own Google address. The browser
+  sends its Firebase sign-in token; the server checks it with Google and reads
+  the email from it. The browser can't choose the recipient, so nobody can use
+  the endpoint to email someone else, and one user never gets another's emails.
 - Input is validated and HTML-escaped before it goes into the email.
 - A small per-IP rate limit slows down abuse (best effort: it lives in one
   server instance's memory).
@@ -24,6 +26,9 @@ import urllib.error
 import urllib.request
 
 RESEND_URL = "https://api.resend.com/emails"
+LOOKUP_URL = "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key="
+# Public Firebase web key (same as firebase-config.js; not a secret). Override with FIREBASE_API_KEY.
+DEFAULT_FIREBASE_KEY = "AIzaSyA7XpUu145kJ_gs5LUi0ShqhU06FzuwJss"
 MAX_BODY = 4096
 RATE_LIMIT = 5          # emails
 RATE_WINDOW = 60 * 10   # per 10 minutes, per IP
@@ -114,10 +119,24 @@ def _send(api_key, sender, to, subject, text, body):
         return json.loads(res.read() or b"{}")
 
 
-def process(method, headers, raw_body, ip, env=None, sender_fn=None):
+def _lookup(firebase_key, id_token):
+    """Ask Google who this sign-in token belongs to. Returns the user dict or None."""
+    payload = json.dumps({"idToken": id_token}).encode()
+    req = urllib.request.Request(LOOKUP_URL + firebase_key, data=payload, method="POST",
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as res:
+            users = json.loads(res.read() or b"{}").get("users") or []
+    except urllib.error.HTTPError:
+        return None  # expired, forged or from another project
+    return users[0] if users else None
+
+
+def process(method, headers, raw_body, ip, env=None, sender_fn=None, lookup_fn=None):
     """Pure request logic: returns (status, json_dict). Used by Vercel and dev_server.py."""
     env = os.environ if env is None else env
     send = sender_fn or _send
+    lookup = lookup_fn or _lookup
     if method == "OPTIONS":
         return 204, {}
     if method != "POST":
@@ -138,12 +157,27 @@ def process(method, headers, raw_body, ip, env=None, sender_fn=None):
     if err:
         return 400, {"error": err}
 
+    auth = headers.get("Authorization") or headers.get("authorization") or ""
+    id_token = auth[7:].strip() if auth.startswith("Bearer ") else ""
+    if not id_token or len(id_token) > 4096:
+        return 401, {"error": "Sign in with Google to get reminder emails.", "code": "signin_required"}
+
     api_key = env.get("RESEND_API_KEY", "").strip()
-    to = env.get("REMINDER_TO_EMAIL", "").strip()
-    if not api_key or not to:
+    if not api_key:
         return 503, {"error": "Email isn’t set up on the server yet.", "code": "not_configured"}
 
-    if _rate_limited(ip or "unknown"):
+    try:
+        user = lookup(env.get("FIREBASE_API_KEY", "").strip() or DEFAULT_FIREBASE_KEY, id_token)
+    except Exception as e:
+        print(f"[send_reminder] sign-in check failed: {e!r}")
+        return 502, {"error": "Couldn’t check your sign-in. Try again."}
+    if not user:
+        return 401, {"error": "Your sign-in has expired. Sign out and sign in again.", "code": "signin_required"}
+    to = (user.get("email") or "").strip()
+    if not to or not user.get("emailVerified"):
+        return 403, {"error": "Your Google account has no confirmed email address."}
+
+    if _rate_limited(user.get("localId") or ip or "unknown"):
         return 429, {"error": "Too many test emails. Try again in a few minutes."}
 
     sender = env.get("RESEND_FROM", "").strip() or "Renewal Reminder <onboarding@resend.dev>"
@@ -153,15 +187,17 @@ def process(method, headers, raw_body, ip, env=None, sender_fn=None):
     except urllib.error.HTTPError as e:
         detail = e.read()[:500].decode("utf-8", "replace")
         print(f"[send_reminder] Resend HTTP {e.code}: {detail}")  # server log only
+        if "your own email" in detail.lower() or "verify a domain" in detail.lower():
+            return 502, {"error": "The email service’s free plan can only email the app owner. To email everyone, the owner must verify a domain in Resend.", "code": "owner_only"}
         if "api key" in detail.lower():
             return 502, {"error": "The email service rejected the server’s API key. Check RESEND_API_KEY in Vercel."}
         if e.code in (401, 403):
-            return 502, {"error": "The email service rejected the server’s key or recipient."}
+            return 502, {"error": "The email service rejected this email."}
         return 502, {"error": "The email service couldn’t send this email."}
     except Exception as e:  # network errors, timeouts
         print(f"[send_reminder] send failed: {e!r}")
         return 502, {"error": "Couldn’t reach the email service. Try again."}
-    return 200, {"ok": True, "id": result.get("id")}
+    return 200, {"ok": True, "id": result.get("id"), "to": to}
 
 
 class handler(BaseHTTPRequestHandler):
