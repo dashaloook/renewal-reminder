@@ -65,6 +65,24 @@ Security: only Vercel can start the job (it sends `CRON_SECRET`; other requests 
 
 *Why not Resend:* the first version used Resend. Its free plan only delivers to the Resend account owner unless you verify your own domain, so other users never got their emails. I moved to Brevo, which only needed a new send function on the server; the app itself didn't change.
 
+## Browser notifications (push)
+
+**Turn on notifications** (dashboard banner, the form, or a reminder's details) asks the browser for permission, registers a service worker (`sw.js`) and creates a push subscription (`push.js`). For real accounts the subscription is saved in the user's own Firestore document (`push`, at most 5 devices).
+
+- **On the reminder day** the daily job sends a push to each of the user's devices for reminders set to **Browser**. The browser shows it even when the app is closed; clicking it opens the dashboard.
+- **While the app is open** it also shows today's browser reminders itself (once a day per reminder), which is how demo accounts get them.
+- **Send test notification** in a reminder's details shows one immediately.
+
+Security: pushes are signed with a VAPID key pair. The public key is in `push.js` (public by design); the private key is only in Vercel (`VAPID_PRIVATE_KEY`, Secret) and `.env.local`. The database rules only let a user write their own `push` list.
+
+## Success messages
+
+After saving a reminder, the confirmation says exactly where it will go: *"We'll email **you@gmail.com** on 1 Dec"*, or *"This browser will show a notification on 1 Dec"*. If that can't work yet (demo account for email, notifications off), it says so and offers the fix.
+
+## Why emails can land in Spam
+
+Brevo sends "on behalf of" a `@gmail.com` address from its own servers, so Gmail can't confirm the email really came from Gmail and treats it with suspicion. The emails are written to avoid other spam signals: a personal greeting, no "demo" wording, a plain-text version, a reply-to address, an unsubscribe header and a clear "why you get this" line. Marking one email **Not spam** teaches Gmail. The full fix is sending from your own domain with DKIM/DMARC set up in Brevo.
+
 ## Run locally
 
 1. Copy `.env.example` to `.env.local` and fill in `BREVO_API_KEY` and `BREVO_SENDER`.

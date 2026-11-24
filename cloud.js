@@ -86,7 +86,16 @@
       return snap.exists ? snap.data() : null;
     },
     save(uid, state) {
-      return ref(uid).set({ ...clean(pick(state)), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      // merge: keeps fields this save doesn't own, like the push subscriptions below.
+      return ref(uid).set({ ...clean(pick(state)), updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    },
+    // Remember this device's push subscription (max 5 devices), so the daily job can notify it.
+    async savePush(uid, sub) {
+      if (!sub || !sub.endpoint) return;
+      const snap = await ref(uid).get();
+      const list = ((snap.exists && snap.data().push) || []).filter((s) => s && s.endpoint !== sub.endpoint);
+      const keep = [...list, { endpoint: sub.endpoint, keys: sub.keys || {} }].slice(-5);
+      return ref(uid).set({ push: keep, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
     },
   };
 })();

@@ -150,7 +150,10 @@ function App() {
   Object.assign(R.USER, { photo: '' }, state.user || DEMO_USER);
   R.CLOUD_ACCOUNT = isCloud(state.account);
   const reminders = QS === 'empty' ? [] : state.reminders;
-  const view = { ...state, reminders };
+  // Notifications count as "on" only if the browser really allows them on this device.
+  const pushApi = window.RRPush;
+  const notifOn = !!state.notif && !!pushApi && pushApi.permission() === 'granted';
+  const view = { ...state, reminders, notif: notifOn };
   const update = (fn) => setState((s) => ({ ...s, ...fn(s) }));
 
   const showToast = (title, desc, undoSnapshot) => {
@@ -208,7 +211,31 @@ function App() {
     update(() => ({ authed: false })); go('login');
   };
 
-  const ctx = { state: view, update, decide, postpone, remove, upsert, openDrawer: setDrawer, openLater: setLater, showToast, reset, logout, signIn, auth, confirm: setConfirm, added, setAdded, demo: QS, setDemo };
+  // Turn on real browser notifications for this device (asks the browser for permission).
+  const enableNotifications = async () => {
+    if (!pushApi) return;
+    const res = await pushApi.enable();
+    if (!res.ok) { showToast('Notifications are off', res.error, null); return; }
+    update(() => ({ notif: true, bannerDismissed: true }));
+    if (cloud && cloudUid && res.subscription) { try { await cloud.savePush(cloudUid, res.subscription); } catch (e) { /* not critical */ } }
+    showToast('Notifications are on for this browser', res.error || (cloudUid ? 'We’ll notify this device on each reminder day, even when the app is closed.' : 'We’ll notify you on each reminder day while the app is open. Log in with a real account to get them when it’s closed.'), null);
+    pushApi.show('Notifications are on', 'This is how Renewal Reminder will remind you before a renewal.', 'welcome');
+  };
+  // Signed in on a device that already allows notifications: keep its push subscription up to date.
+  useEffect(() => { if (cloudUid && notifOn && pushApi) pushApi.enable().then((r) => r.subscription && cloud.savePush(cloudUid, r.subscription)).catch(() => {}); }, [cloudUid]);
+  // While the app is open: show today's browser reminders once per day on this device.
+  useEffect(() => {
+    if (!notifOn || !state.authed) return;
+    const today = R.iso(R.today()); let seen = {};
+    try { seen = JSON.parse(localStorage.getItem('rr-notified') || '{}'); } catch (e) { /* ok */ }
+    if (seen.day !== today) seen = { day: today, ids: [] };
+    state.reminders.filter((r) => r.channel !== 'email' && r.status !== 'cancelled' && !seen.ids.includes(r.id)
+      && ((R.daysUntil(r.date) >= 0 && R.daysUntil(r.date) === Number(r.remind)) || (r.status === 'unfinished' && r.followUp === today)))
+      .forEach((r) => { const n = R.daysUntil(r.date); pushApi.show(`${r.name} renews ${n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`}`, `Charge date: ${fmt(r.date)}. Keep it, cancel it, or decide later.`, `rr-${r.id}-${today}`); seen.ids.push(r.id); });
+    try { localStorage.setItem('rr-notified', JSON.stringify(seen)); } catch (e) { /* ok */ }
+  }, [notifOn, state.authed, state.reminders]);
+
+  const ctx = { state: view, update, decide, postpone, remove, upsert, openDrawer: setDrawer, openLater: setLater, showToast, reset, logout, signIn, auth, confirm: setConfirm, added, setAdded, demo: QS, setDemo, enableNotifications };
 
   // route guard
   let [page, param] = route;
@@ -460,7 +487,7 @@ function Dashboard({ ctx }) {
   return html`
     <div class="page-head"><div class="col gap4"><h1 class="h1">${greet}, ${R.USER.first}</h1><p class="body-l c2" style=${{ margin: 0 }}>${dateStr} · ${unfinished.length ? `${unfinished.length} decision${unfinished.length > 1 ? 's are' : ' is'} waiting for you` : 'nothing is waiting for you'}</p></div><${Btn} sm icon="plus" class="ph-add" onClick=${() => go('new')}>Add reminder<//></div>
     ${!state.notif && !state.bannerDismissed && html`<div class="banner" role="region" aria-label="Notifications are off"><span class="ic"><${Icon} n="bell-off" /></span><div class="grow"><b>Turn on notifications so you don’t miss a renewal</b><div class="c2">Browser notifications are off. We only notify you about reminders you set.</div></div>
-      <${Btn} sm onClick=${() => { ctx.update(() => ({ notif: true })); ctx.showToast('Notifications are on', 'Simulated in this demo — no real notifications are sent.', null); }}>Turn on<//><${Btn} v="ghost" sm onClick=${() => ctx.update(() => ({ bannerDismissed: true }))}>Dismiss<//></div>`}
+      <${Btn} sm onClick=${ctx.enableNotifications}>Turn on<//><${Btn} v="ghost" sm onClick=${() => ctx.update(() => ({ bannerDismissed: true }))}>Dismiss<//></div>`}
     <section class="hero" aria-labelledby="ud-h">
       <div class="row gap12"><h2 class="h2" id="ud-h">Unfinished decisions</h2>${unfinished.length > 0 && html`<span class="badge t-brand"><${Icon} n="hourglass" />${unfinished.length} waiting</span>`}<span class="grow"></span><a class="link" href="#/reminders?f=unfinished" onClick=${(e) => { e.preventDefault(); sessionStorage.setItem('rr-filter', 'unfinished'); go('reminders'); }}>View all</a></div>
       ${unfinished.length ? html`<p class="c2" style=${{ margin: 0 }}>You postponed these. They’ll keep coming back until you decide — no pressure, just no surprises.</p>
@@ -518,8 +545,12 @@ function Drawer({ r, ctx, onClose }) {
   const [mail, setMail] = useState({ s: 'idle', msg: '' });
   const sendTest = async () => {
     setMail({ s: 'sending', msg: '' });
-    try { const d = await window.RRApi.sendReminder(r); setMail({ s: 'sent', msg: `Sent to ${d.to}. Check your inbox (and spam).` }); ctx.showToast(`Test email sent for ${r.name}`, `It went to ${d.to}.`, null); }
+    try { const d = await window.RRApi.sendReminder(r); setMail({ s: 'sent', msg: `Test email sent to ${d.to}. It can take a minute; if it’s not in your inbox, check Spam.` }); ctx.showToast(`Test email sent for ${r.name}`, `It went to ${d.to}.`, null); }
     catch (e) { setMail({ s: 'error', msg: e.message, code: e.code }); }
+  };
+  const testNotif = async () => {
+    const n = R.daysUntil(r.date); const ok = await window.RRPush.show(`${r.name} renews ${n === 0 ? 'today' : n === 1 ? 'tomorrow' : n > 0 ? `in ${n} days` : 'soon'}`, `Charge date: ${fmt(r.date)}. Keep it, cancel it, or decide later.`, 'test-' + r.id);
+    setMail(ok ? { s: 'notif', msg: 'Test notification sent. Look at the corner of your screen.' } : { s: 'notif-err', msg: 'This browser didn’t show it. Check that notifications are allowed for this site.' });
   };
   const resend = () => ctx.auth.resendVerification().then(() => setMail({ s: 'sent', msg: `Confirmation link sent to ${R.USER.email}. Open it, then send the test email again.` })).catch((e) => setMail({ s: 'error', msg: ctx.auth.friendly(e) }));
   return html`<div class="scrim" onClick=${onClose}></div>
@@ -539,11 +570,17 @@ function Drawer({ r, ctx, onClose }) {
         <div><dt>${r.category === 'document' ? 'Expires' : 'Next charge'}</dt><dd>${fmt(r.date, { day: 'numeric', month: 'long', year: 'numeric' })} (${rel(n).toLowerCase()})</dd></div>
         <div><dt>Remind me</dt><dd>${remindTxt(r.remind)} · ${r.channel === 'email' ? 'Email' : 'Browser'}</dd></div>
         <div><dt>Note</dt><dd>${r.note || '—'}</dd></div></dl>
-      ${r.status !== 'cancelled' && html`<div class="col" style=${{ gap: 8 }}><b>Email reminder</b>
-        ${R.CLOUD_ACCOUNT ? html`<span class="small c2">Send yourself the email you’d get before ${r.name} renews. It goes to ${R.USER.email}.</span>
+      ${r.status !== 'cancelled' && (r.channel === 'email' ? html`<div class="col" style=${{ gap: 8 }}><b>Email reminder</b>
+        ${R.CLOUD_ACCOUNT ? html`<span class="small c2">On the reminder day we email <b>${R.USER.email}</b>. Send yourself a test now to see it.</span>
         <div><${Btn} v="secondary" sm icon="mail" loading=${mail.s === 'sending'} onClick=${sendTest}>${mail.s === 'sending' ? 'Sending…' : 'Send test email'}<//></div>`
         : html`<span class="small c2">Emails go to your own address. Log in with Google or a real email account to get them.</span>`}
-        <span aria-live="polite">${mail.s === 'sent' ? html`<span class="msg ok"><${Icon} n="circle-check" c="xs" />${mail.msg}</span>` : mail.s === 'error' ? html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${mail.msg}</span>${mail.code === 'unverified' && ctx.auth && html` <button type="button" class="link" onClick=${resend}>Send the confirmation link again</button>`}` : ''}</span></div>`}
+        <span aria-live="polite">${mail.s === 'sent' ? html`<span class="msg ok"><${Icon} n="circle-check" c="xs" />${mail.msg}</span>` : mail.s === 'error' ? html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${mail.msg}</span>${mail.code === 'unverified' && ctx.auth && html` <button type="button" class="link" onClick=${resend}>Send the confirmation link again</button>`}` : ''}</span></div>`
+      : html`<div class="col" style=${{ gap: 8 }}><b>Browser notification</b>
+        ${ctx.state.notif ? html`<span class="small c2">On the reminder day this browser shows a notification${R.CLOUD_ACCOUNT ? ', even if the app is closed' : ' while the app is open'}.</span>
+          <div><${Btn} v="secondary" sm icon="bell" onClick=${testNotif}>Send test notification<//></div>`
+        : html`<span class="small c2">Notifications are off on this device, so we can’t remind you here.</span>
+          <div><${Btn} v="secondary" sm icon="bell" onClick=${ctx.enableNotifications}>Turn on notifications<//></div>`}
+        <span aria-live="polite">${mail.s === 'notif' ? html`<span class="msg ok"><${Icon} n="circle-check" c="xs" />${mail.msg}</span>` : mail.s === 'notif-err' ? html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${mail.msg}</span>` : ''}</span></div>`)}
       <div class="col gap12"><b>History</b>${[...r.history].reverse().map((h) => html`<div class="row gap12"><span class="logo sm" style=${{ background: 'var(--subtle)', color: 'var(--text-2)' }}><${Icon} n=${{ created: 'plus', reminded: 'bell', postponed: 'hourglass', cancelled: 'x', kept: 'check', edited: 'pencil' }[h.type] || 'info'} c="xs" /></span><div><div>${h.text}</div><div class="small c3">${fmt(h.date)}</div></div></div>`)}</div>
     </div>
     <div class="row" style=${{ padding: 24, borderTop: '1px solid var(--muted)', justifyContent: 'space-between' }}>
@@ -566,9 +603,21 @@ function AddedDialog({ r, ctx }) {
     <span class="logo lg" style=${{ background: 'var(--success-subtle)', color: 'var(--success)' }}><${Icon} n="circle-check" /></span>
     <h2 class="h2" id="ad-h">Added. We’ll remind you on ${fmt(remindOn)}</h2>
     <div class="row gap12" style=${{ padding: 16, background: 'var(--subtle)', borderRadius: 12, width: '100%', textAlign: 'left' }}><${Logo} r=${r} /><div><b>${r.name} · ${amountLine(r)}</b><div class="small c3">${r.category === 'document' ? 'Expires' : 'Renews'} ${fmt(r.date)} · reminder ${remindTxt(r.remind)}, ${r.channel === 'email' ? 'by email' : 'in the browser'}</div></div></div>
+    <${ChannelNote} r=${r} ctx=${ctx} on=${remindOn} />
     <p class="c2" style=${{ margin: 0 }}>It’s already on your dashboard and in your list.${total ? ` Your monthly total is now ${money(total)}.` : ''}</p>
     <div class="row wrap" style=${{ justifyContent: 'center' }}><${Btn} v="secondary" icon="plus" onClick=${another}>Add another<//><${Btn} iconR="arrow-right" data-autofocus onClick=${toList}>Go to my list<//></div>
   </div>`;
+}
+
+// Says exactly where the reminder will go: which email address, or this browser.
+function ChannelNote({ r, ctx, on }) {
+  const when = fmt(on);
+  const box = (icon, tone, body) => html`<div class="row gap12" role="status" style=${{ padding: 14, borderRadius: 12, width: '100%', textAlign: 'left', background: tone === 'ok' ? 'var(--success-subtle)' : 'var(--warning-subtle)', alignItems: 'flex-start' }}><span style=${{ color: tone === 'ok' ? 'var(--success)' : 'var(--warning)', marginTop: 2 }}><${Icon} n=${icon} c="s" /></span><div class="small" style=${{ color: 'var(--text)' }}>${body}</div></div>`;
+  if (r.channel === 'email') return R.CLOUD_ACCOUNT
+    ? box('mail', 'ok', html`<b>Email reminder is set.</b> We’ll email <b>${R.USER.email}</b> on ${when}. If it isn’t in your inbox, check Spam and mark it “Not spam”.`)
+    : box('info', 'warn', html`<b>Email reminders need a real account.</b> Log in with Google or your email account and we’ll email you on ${when}.`);
+  if (ctx.state.notif) return box('bell', 'ok', html`<b>Browser notification is set.</b> This browser will show a notification on ${when}${R.CLOUD_ACCOUNT ? ', even if the app is closed' : ' while the app is open'}.`);
+  return box('bell-off', 'warn', html`<b>Notifications are off on this device.</b> Turn them on so we can remind you on ${when}. <button type="button" class="link" onClick=${ctx.enableNotifications}>Turn on notifications</button>`);
 }
 
 // ---------- Decide later ----------
@@ -706,7 +755,7 @@ function CreateForm({ ctx, editId }) {
       const rec = { ...f, link: normUrl(f.link) || '', id: editing ? editing.id : uid(), name: f.name.trim(), amount: f.category === 'document' ? 0 : (isNaN(amountNum) ? 0 : amountNum), cycle: f.category === 'document' ? 'one-time' : f.cycle,
         status: editing ? editing.status : 'active', reason: editing ? editing.reason : '', followUp: editing ? editing.followUp : '', history: editing ? editing.history : [{ type: 'created', date: R.iso(R.today()), text: 'Created' }] };
       ctx.upsert(rec); setSaving(false); setDirty(false);
-      if (editing) { try { sessionStorage.setItem('rr-focus', rec.date); } catch (e) { /* ok */ } ctx.showToast(`${rec.name} saved`, 'Your changes are on the dashboard and in your list.', null); go('reminders'); }
+      if (editing) { try { sessionStorage.setItem('rr-focus', rec.date); } catch (e) { /* ok */ } ctx.showToast(`${rec.name} saved`, rec.channel === 'email' ? (R.CLOUD_ACCOUNT ? `Reminder by email to ${R.USER.email}.` : 'Email reminders need a real account.') : (ctx.state.notif ? 'Reminder by notification in this browser.' : 'Turn on notifications to get the browser reminder.'), null); go('reminders'); }
       else { ctx.setAdded({ id: rec.id, date: rec.date, phase: 'popup' }); go('reminders'); }
     }, 800);
   };
@@ -717,6 +766,7 @@ function CreateForm({ ctx, editId }) {
       <span class="logo lg" style=${{ background: 'var(--success-subtle)', color: 'var(--success)' }}><${Icon} n="circle-check" /></span>
       <h1 class="h2">${editing ? 'Saved.' : 'Added.'} We’ll remind you on ${fmt(R.daysUntil(rd) < 0 ? R.iso(R.today()) : rd)}</h1>
       <div class="row gap12" style=${{ padding: 16, background: 'var(--subtle)', borderRadius: 12, width: '100%', textAlign: 'left' }}><${Logo} r=${done} /><div><b>${done.name} · ${amountLine(done)}</b><div class="small c3">${done.category === 'document' ? 'Expires' : 'Renews'} ${fmt(done.date)} · reminder ${remindTxt(done.remind)}, ${done.channel === 'email' ? 'by email' : 'in the browser'}</div></div></div>
+      <${ChannelNote} r=${done} ctx=${ctx} on=${R.daysUntil(rd) < 0 ? R.iso(R.today()) : rd} />
       <p class="c2" style=${{ margin: 0 }}>It’s already on your dashboard and in your list.</p>
       <div class="row wrap" style=${{ justifyContent: 'center' }}><${Btn} v="secondary" icon="plus" onClick=${() => { setDone(null); setF(blank); setTpl(null); go('new'); }}>Add another<//><${Btn} iconR="arrow-right" data-autofocus onClick=${() => { try { sessionStorage.setItem('rr-focus', done.date); } catch (e) { /* ok */ } go('reminders'); }}>Go to my list<//></div></div>`;
   }
@@ -766,7 +816,7 @@ function CreateForm({ ctx, editId }) {
         ${f.date && html`<div class="col gap12">${[['circle-check', 'Reminder set', 'Today'], ['bell', `We remind you (${f.channel === 'email' ? 'email' : 'browser'})`, fmt(remindDate)], ['calendar', `${f.name || 'It'} ${isDoc ? 'expires' : 'renews'}${f.amount && !isDoc && !amountBad ? ' · ' + money(amountNum) : ''}`, fmt(f.date)]].map(([ic, l, d]) => html`<div class="row gap12"><span class="cb"><${Icon} n=${ic} c="s" /></span><div><div>${l}</div><div class="small c3">${d}</div></div></div>`)}</div>`}
       </div>
       ${!ctx.state.notif && html`<div class="card pad20 col gap12"><b class="row"><span class="cb"><${Icon} n="bell" c="s" /></span>Remind you ${remindTxt(f.remind)}${f.name ? ` ${f.name} renews` : ''}?</b><span class="small c2">Browser notifications are off. You can still save without them — we’ll show it on your dashboard.</span>
-        <div class="row"><${Btn} v="secondary" sm onClick=${() => { ctx.update(() => ({ notif: true })); ctx.showToast('Notifications are on', 'Simulated in this demo.', null); }}>Allow notifications<//><${Btn} v="ghost" sm onClick=${() => ctx.update(() => ({ bannerDismissed: true, notif: false }))}>Not now<//></div></div>`}
+        <div class="row"><${Btn} v="secondary" sm onClick=${ctx.enableNotifications}>Allow notifications<//><${Btn} v="ghost" sm onClick=${() => ctx.update(() => ({ bannerDismissed: true, notif: false }))}>Not now<//></div></div>`}
     </aside>
   </form>`;
 }

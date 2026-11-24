@@ -1,8 +1,9 @@
-"""GET /api/daily_reminders — the daily job that sends automatic reminder emails.
+"""GET /api/daily_reminders — the daily job that sends automatic reminders.
 
 Vercel Cron calls it once a day (see vercel.json). For every user it reads their
 reminders from Firestore and emails the ones that are due today:
-- the reminder is set to "Remind me … by Email" (channel == "email"),
+- "by Email" reminders get an email; "Browser" reminders get a push notification
+  on every device where the user turned notifications on,
 - it isn't cancelled,
 - today is exactly `remind` days before the charge date (0 = on the day),
   or it was postponed ("Decide later") and today is its follow-up date.
@@ -16,6 +17,8 @@ Security model
   ever reads; it never writes.
 - The recipient is the user's own confirmed address from Firebase Authentication,
   never an address stored in the database (users could edit that).
+- Push notifications are signed with VAPID_PRIVATE_KEY (Vercel Secret); the
+  matching public key is in push.js. Subscriptions live in each user's own document.
 - `?dry=1` reports what would be sent without sending anything.
 """
 
@@ -64,7 +67,7 @@ def next_date(r, today):
 def due_today(r, today):
     """Returns (is_due, charge_date, days_left)."""
     try:
-        if r.get("channel") != "email" or r.get("status") == "cancelled" or not r.get("name") or not r.get("date"):
+        if r.get("status") == "cancelled" or not r.get("name") or not r.get("date"):
             return False, None, None
         d = next_date(r, today)
         days = (d - today).days
@@ -111,14 +114,14 @@ def _call(url, token, body=None):
 
 
 def load_users(sa, token):
-    """[(uid, reminders)] for every user document."""
+    """[(uid, reminders, push_subscriptions)] for every user document."""
     base = f"https://firestore.googleapis.com/v1/projects/{sa['project_id']}/databases/(default)/documents/users?pageSize=300"
     out, page = [], ""
     while True:
         data = _call(base + (f"&pageToken={urllib.parse.quote(page)}" if page else ""), token)
         for doc in data.get("documents", []):
             fields = {k: decode(v) for k, v in doc.get("fields", {}).items()}
-            out.append((doc["name"].rsplit("/", 1)[-1], fields.get("reminders") or []))
+            out.append((doc["name"].rsplit("/", 1)[-1], fields.get("reminders") or [], fields.get("push") or []))
         page = data.get("nextPageToken")
         if not page:
             return out
@@ -135,9 +138,15 @@ def lookup_emails(sa, token, uids):
     return found
 
 
+def send_push(sub, payload, private_key, subject):
+    from pywebpush import webpush
+    webpush(subscription_info=sub, data=json.dumps(payload), vapid_private_key=private_key,
+            vapid_claims={"sub": subject}, timeout=10, ttl=24 * 3600)
+
+
 # ---------- the job ----------
 
-def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=None):
+def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=None, push_fn=None):
     """Pure job logic: returns (status, summary). Injectable for tests."""
     env = os.environ if env is None else env
     channel = mail_channel(env)
@@ -156,12 +165,17 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
         print(f"[daily] couldn't read the database: {e!r}")
         return 502, {"error": "Couldn’t read the database. Check FIREBASE_SERVICE_ACCOUNT."}
 
-    due = [(uid, r, d, n) for uid, rs in users for r in rs if isinstance(r, dict) for ok, d, n in [due_today(r, today)] if ok]
-    emails = (lookup_fn or (lambda ids: lookup_emails(sa, token, ids)))(sorted({u for u, *_ in due})) if due else {}
+    users = [u if len(u) == 3 else (u[0], u[1], []) for u in users]
+    due = [(uid, r, d, n, subs) for uid, rs, subs in users for r in rs if isinstance(r, dict) for ok, d, n in [due_today(r, today)] if ok]
+    due_mail = [x for x in due if x[1].get("channel") == "email"]
+    due_push = [x for x in due if x[1].get("channel") != "email"]
+    emails = (lookup_fn or (lambda ids: lookup_emails(sa, token, ids)))(sorted({u for u, *_ in due_mail})) if due_mail else {}
     send, secret, sender, service = channel
     send = send_fn or send
-    summary = {"service": service, "date": today.isoformat(), "users": len(users), "due": len(due), "sent": 0, "skipped_unconfirmed": 0, "failed": 0, "dry": dry}
-    for uid, r, d, n in due:
+    summary = {"service": service, "date": today.isoformat(), "users": len(users), "due": len(due_mail), "sent": 0,
+               "skipped_unconfirmed": 0, "failed": 0, "dry": dry,
+               "push_due": len(due_push), "push_sent": 0, "push_failed": 0, "push_no_device": 0}
+    for uid, r, d, n, _ in due_mail:
         to = emails.get(uid)
         if not to:
             summary["skipped_unconfirmed"] += 1
@@ -179,6 +193,28 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
             print(f"[daily] send failed for user {uid[:6]}…")  # no email address in logs
             friendly_send_error(e)
             summary["failed"] += 1
+
+    vapid = env.get("VAPID_PRIVATE_KEY", "").strip()
+    push = push_fn or send_push
+    for uid, r, d, n, subs in due_push:
+        subs = [x for x in subs if isinstance(x, dict) and x.get("endpoint") and isinstance(x.get("keys"), dict)]
+        if not subs or not vapid:
+            summary["push_no_device"] += 1
+            continue
+        when = "today" if n == 0 else "tomorrow" if n == 1 else f"in {n} days"
+        payload = {"title": f"{str(r['name'])[:80]} renews {when}", "body": f"Charge date: {d.strftime('%d %b')}. Keep it, cancel it, or decide later.",
+                   "tag": f"rr-{r.get('id', '')}-{today.isoformat()}", "url": "/#/dashboard"}
+        for sub in subs:
+            if dry:
+                summary["would_push"] = summary.get("would_push", 0) + 1
+                continue
+            try:
+                push({"endpoint": sub["endpoint"], "keys": sub["keys"]}, payload, vapid, env.get("VAPID_SUBJECT", "").strip() or "https://renewal-reminder-one.vercel.app")
+                summary["push_sent"] += 1
+            except Exception as e:
+                code = getattr(getattr(e, "response", None), "status_code", None)
+                print(f"[daily] push failed for user {uid[:6]}…: {code or type(e).__name__}")  # 404/410 = device unsubscribed
+                summary["push_failed"] += 1
     print(f"[daily] {summary}")
     return 200, summary
 

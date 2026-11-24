@@ -87,25 +87,43 @@ def _when(days):
     return f"{-days} days ago"
 
 
+APP_URL = os.environ.get("APP_URL", "https://renewal-reminder-one.vercel.app")
+
+
+def _nice_date(iso):
+    try:
+        y, m, d = (int(x) for x in iso.split("-"))
+        return f"{d} {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1]} {y}"
+    except Exception:
+        return iso
+
+
 def build_email(r):
+    """A plain, personal-looking email: spam filters dislike robotic subjects,
+    'demo' wording, missing text versions and no way to stop the emails."""
     name = html.escape(r["name"])
     when = _when(r["daysLeft"])
     per = CYCLES[r["cycle"]]
     price = f"€{r['amount']:.2f}" + (f" / {per}" if per and r["amount"] else "")
-    # The send time makes every subject unique, so Gmail shows each email as its
-    # own message instead of folding it into an older conversation.
-    sent = time.strftime("%d %b, %H:%M:%S UTC", time.gmtime())
-    subject = f"{r['name']} renews {when or 'on ' + r['date']} · {sent}"[:120]
-    text = (f"{r['name']} renews {when + ' ' if when else ''}on {r['date']}."
+    day = _nice_date(r["date"])
+    # The charge date in the subject keeps different reminders apart in Gmail.
+    subject = f"Reminder: {r['name']} renews {when or 'soon'} ({day})"[:120]
+    text = (f"Hi,\n\n{r['name']} renews {when + ' ' if when else ''}on {day}."
             + (f" Amount: {price}." if r["amount"] else "")
-            + "\n\nKeep it, cancel it on the service's site, or decide later in Renewal Reminder."
-            + "\n\nThis is a demo reminder sent from the Renewal Reminder coursework prototype.")
-    body = f"""<div style="font-family:Arial,sans-serif;max-width:480px;color:#14142B">
-<h2 style="margin:0 0 8px">{name} renews {html.escape(when) if when else 'soon'}</h2>
-<p style="margin:0 0 4px">Charge date: <b>{html.escape(r['date'])}</b></p>
-{f'<p style="margin:0 0 16px">Amount: <b>{html.escape(price)}</b></p>' if r['amount'] else ''}
-<p style="margin:0 0 16px">Keep it, cancel it on the service’s site, or decide later — before the charge goes through.</p>
-<p style="margin:0;color:#6E7191;font-size:12px">Demo reminder from the Renewal Reminder coursework prototype.</p></div>"""
+            + "\n\nDecide before the charge: keep it, cancel it on the service's website, or postpone the decision."
+            + f"\n\nOpen Renewal Reminder: {APP_URL}"
+            + "\n\nYou get this email because you set an email reminder for this renewal."
+            + " To stop it, open the reminder in the app and switch it to Browser, or delete it.")
+    body = f"""<!doctype html><html><body style="margin:0;padding:24px;background:#F6F5FB">
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;color:#14142B">
+<p style="margin:0 0 12px;font-size:15px">Hi,</p>
+<h2 style="margin:0 0 12px;font-size:20px">{name} renews {html.escape(when) if when else 'soon'}</h2>
+<p style="margin:0 0 4px;font-size:15px">Charge date: <b>{html.escape(day)}</b></p>
+{f'<p style="margin:0 0 16px;font-size:15px">Amount: <b>{html.escape(price)}</b></p>' if r['amount'] else ''}
+<p style="margin:0 0 20px;font-size:15px">Decide before the charge: keep it, cancel it on the service’s website, or postpone the decision.</p>
+<p style="margin:0 0 24px"><a href="{APP_URL}/#/dashboard" style="background:#16132B;color:#fff;text-decoration:none;padding:12px 20px;border-radius:999px;font-size:14px;display:inline-block">Open Renewal Reminder</a></p>
+<p style="margin:0;color:#6E7191;font-size:12px;line-height:1.5">You get this email because you set an email reminder for this renewal in Renewal Reminder. To stop it, open the reminder and switch it to Browser, or delete it.</p>
+</div></body></html>"""
     return subject, text, body
 
 
@@ -133,7 +151,10 @@ def _send_brevo(api_key, sender, to, subject, text, body):
     from email.utils import parseaddr
     name, addr = parseaddr(sender)
     payload = json.dumps({"sender": {"name": name or "Renewal Reminder", "email": addr}, "to": [{"email": to}],
-                          "subject": subject, "textContent": text, "htmlContent": body}).encode()
+                          "replyTo": {"email": addr, "name": name or "Renewal Reminder"},
+                          "subject": subject, "textContent": text, "htmlContent": body,
+                          # Tells Gmail how to stop the emails; missing unsubscribe info is a spam signal.
+                          "headers": {"List-Unsubscribe": f"<mailto:{addr}?subject=Stop%20Renewal%20Reminder%20emails>"}}).encode()
     req = urllib.request.Request(BREVO_URL, data=payload, method="POST", headers={
         "api-key": api_key, "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "renewal-reminder/1.0"})
     with urllib.request.urlopen(req, timeout=10) as res:
