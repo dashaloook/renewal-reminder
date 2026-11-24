@@ -5,7 +5,8 @@ Runs as a Vercel Python serverless function, and locally through dev_server.py.
 Security model
 - The Resend key is read from the RESEND_API_KEY environment variable on the
   server. It is never sent to the browser and never written in the code.
-- The email goes to the signed-in person's own Google address. The browser
+- The email goes to the signed-in person's own, confirmed address (Google or
+  email account). The browser
   sends its Firebase sign-in token; the server checks it with Google and reads
   the email from it. The browser can't choose the recipient, so nobody can use
   the endpoint to email someone else, and one user never gets another's emails.
@@ -160,7 +161,7 @@ def process(method, headers, raw_body, ip, env=None, sender_fn=None, lookup_fn=N
     auth = headers.get("Authorization") or headers.get("authorization") or ""
     id_token = auth[7:].strip() if auth.startswith("Bearer ") else ""
     if not id_token or len(id_token) > 4096:
-        return 401, {"error": "Sign in with Google to get reminder emails.", "code": "signin_required"}
+        return 401, {"error": "Log in with Google or your email account to get reminder emails.", "code": "signin_required"}
 
     api_key = env.get("RESEND_API_KEY", "").strip()
     if not api_key:
@@ -175,7 +176,7 @@ def process(method, headers, raw_body, ip, env=None, sender_fn=None, lookup_fn=N
         return 401, {"error": "Your sign-in has expired. Sign out and sign in again.", "code": "signin_required"}
     to = (user.get("email") or "").strip()
     if not to or not user.get("emailVerified"):
-        return 403, {"error": "Your Google account has no confirmed email address."}
+        return 403, {"error": "Confirm your email first: open the link we sent you when you created the account, then try again.", "code": "unverified"}
 
     if _rate_limited(user.get("localId") or ip or "unknown"):
         return 429, {"error": "Too many test emails. Try again in a few minutes."}

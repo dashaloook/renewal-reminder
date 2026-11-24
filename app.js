@@ -50,6 +50,8 @@ const P = {
 };
 const Icon = ({ n, c = '', label, style }) => html`<svg class=${'icon ' + c} style=${style} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden=${label ? undefined : 'true'} role=${label ? 'img' : undefined} aria-label=${label} dangerouslySetInnerHTML=${{ __html: P[n] || '' }}></svg>`;
 
+// Real accounts (Firebase): signed in with Google or with email + password.
+const isCloud = (a) => a === 'google' || a === 'email';
 const Demo = () => R.CLOUD_ACCOUNT ? null : html`<span class="demo-tag" role="note" title="Demo mode: all data is for demonstration" aria-label="Demo mode: all data is for demonstration">Demo</span>`;
 const ServiceLink = ({ r }) => r.link
   ? html`<a class="link" href=${r.link} target="_blank" rel="noopener noreferrer" aria-label=${`Cancel on ${hostOf(r.link)} (opens in a new tab)`}>Cancel on ${hostOf(r.link)}<${Icon} n="external" c="xs" /></a>`
@@ -104,15 +106,15 @@ function App() {
   useEffect(() => { save(state); }, [state]);
   // ---- Real accounts (Firebase). Only active when firebase-config.js has a config.
   const cloud = window.RRCloud && window.RRCloud.enabled ? window.RRCloud : null;
-  const cloudUid = state.account === 'google' && state.user ? state.user.uid : null;
+  const cloudUid = isCloud(state.account) && state.user ? state.user.uid : null;
   const cloudReady = useRef(false); // true once this user's data came from the cloud, so we never overwrite it with an empty list
   const saveErr = useRef(false);
   const cloudFields = (d) => ({ reminders: R.rollForward((d && d.reminders) || []), stats: (d && d.stats) || { onTime: 0, total: 0 }, onboarded: !!(d && d.onboarded), notif: !!(d && d.notif), bannerDismissed: !!(d && d.bannerDismissed) });
   // After a reload: confirm the Google session is still valid and refresh the data from the cloud.
   useEffect(() => cloud ? cloud.onUser(async (u) => {
-    const s = load(); if (!s || s.account !== 'google') return;
-    if (!u || (s.user && s.user.uid !== u.uid)) { cloudReady.current = false; setState((x) => (x.account === 'google' ? { ...freshState() } : x)); return; }
-    try { const d = await cloud.load(u.uid); cloudReady.current = true; setState((x) => (x.account === 'google' ? { ...x, ...cloudFields(d), user: u, loadFail: false } : x)); }
+    const s = load(); if (!s || !isCloud(s.account)) return;
+    if (!u || (s.user && s.user.uid !== u.uid)) { cloudReady.current = false; setState((x) => (isCloud(x.account) ? { ...freshState() } : x)); return; }
+    try { const d = await cloud.load(u.uid); cloudReady.current = true; setState((x) => (isCloud(x.account) ? { ...x, ...cloudFields(d), user: u, loadFail: false } : x)); }
     catch (e) { setState((x) => ({ ...x, loadFail: true })); }
   }) : undefined, []);
   // Save this user's reminders to the cloud (debounced).
@@ -121,13 +123,22 @@ function App() {
     const t = setTimeout(() => { cloud.save(cloudUid, state).then(() => { saveErr.current = false; }).catch(() => { if (!saveErr.current) { saveErr.current = true; showToast('Couldn’t save to your account', 'Check your connection. Changes stay on this device and sync when you’re back online.', null); } }); }, 600);
     return () => clearTimeout(t);
   }, [state.reminders, state.stats, state.onboarded, state.notif, state.bannerDismissed, cloudUid, state.authed]);
-  const signInGoogle = async () => {
-    const u = await cloud.signInWithGoogle(); if (!u) return;
+  // After any real sign-in: load this person's reminders and open the app.
+  const enterCloud = async (u) => {
+    if (!u) return;
     const d = await cloud.load(u.uid);
     cloudReady.current = true;
-    setState((s) => ({ ...freshState(), ...cloudFields(d), account: 'google', user: u, authed: true, loadFail: false }));
+    setState((s) => ({ ...freshState(), ...cloudFields(d), account: u.provider, user: u, authed: true, loadFail: false }));
     go(d && d.onboarded ? 'dashboard' : 'onboarding');
   };
+  const auth = cloud ? {
+    google: async () => enterCloud(await cloud.signInWithGoogle()),
+    logIn: async (email, pw) => enterCloud(await cloud.signInWithEmail(email, pw)),
+    signUp: async (email, pw, name) => enterCloud(await cloud.signUpWithEmail(email, pw, name)),
+    reset: (email) => cloud.resetPassword(email),
+    resendVerification: () => cloud.resendVerification(),
+    friendly: cloud.friendly,
+  } : null;
   // Demo state switcher (same as ?state=loading|empty|error in the URL, but available from the profile menu)
   const setDemo = (s) => {
     QS = s || null;
@@ -137,7 +148,7 @@ function App() {
   useEffect(() => { if (route[0] !== 'reminders') setAdded(null); }, [route[0]]);
 
   Object.assign(R.USER, { photo: '' }, state.user || DEMO_USER);
-  R.CLOUD_ACCOUNT = state.account === 'google';
+  R.CLOUD_ACCOUNT = isCloud(state.account);
   const reminders = QS === 'empty' ? [] : state.reminders;
   const view = { ...state, reminders };
   const update = (fn) => setState((s) => ({ ...s, ...fn(s) }));
@@ -193,11 +204,11 @@ function App() {
   };
   const logout = () => {
     // A real account: sign out of Google and remove its reminders from this device.
-    if (state.account === 'google') { cloudReady.current = false; if (cloud) cloud.signOut(); setState(freshState()); go('login'); return; }
+    if (isCloud(state.account)) { cloudReady.current = false; if (cloud) cloud.signOut(); setState(freshState()); go('login'); return; }
     update(() => ({ authed: false })); go('login');
   };
 
-  const ctx = { state: view, update, decide, postpone, remove, upsert, openDrawer: setDrawer, openLater: setLater, showToast, reset, logout, signIn, signInGoogle: cloud ? signInGoogle : null, confirm: setConfirm, added, setAdded, demo: QS, setDemo };
+  const ctx = { state: view, update, decide, postpone, remove, upsert, openDrawer: setDrawer, openLater: setLater, showToast, reset, logout, signIn, auth, confirm: setConfirm, added, setAdded, demo: QS, setDemo };
 
   // route guard
   let [page, param] = route;
@@ -207,7 +218,7 @@ function App() {
 
   let body;
   if (page === 'onboarding') body = html`<${Onboarding} ctx=${ctx} />`;
-  else if (page === 'login') body = html`<${Login} ctx=${ctx} />`;
+  else if (['login', 'signup', 'reset'].includes(page)) body = html`<${Login} ctx=${ctx} mode=${page} key=${page} />`;
   else body = html`<${Shell} ctx=${ctx} page=${page}>
       ${page === 'dashboard' && html`<${Dashboard} ctx=${ctx} key=${'d' + QS} />`}
       ${page === 'reminders' && html`<${ListScreen} ctx=${ctx} key=${'l' + QS} />`}
@@ -274,7 +285,7 @@ const ONB_SERVICES = ['Netflix', 'Spotify Family', 'ChatGPT Plus', 'iCloud+'];
 function Onboarding({ ctx }) {
   const [step, setStep] = useState(1);
   const [reason, setReason] = useState('No access to account'); const [posted, setPosted] = useState(false);
-  const [sel, setSel] = useState(ctx.state.account === 'new' || ctx.state.account === 'google' ? [] : ['Netflix', 'Spotify Family', 'ChatGPT Plus']);
+  const [sel, setSel] = useState(ctx.state.account === 'new' || isCloud(ctx.state.account) ? [] : ['Netflix', 'Spotify Family', 'ChatGPT Plus']);
   const [why, setWhy] = useState(false); const [other, setOther] = useState(false); const [busy, setBusy] = useState(false);
   const services = ONB_SERVICES.map((n) => R.TEMPLATES.find((t) => t.name === n));
   const chosen = services.filter((s) => sel.includes(s.name)); const monthly = chosen.reduce((a, s) => a + s.amount, 0);
@@ -341,46 +352,70 @@ function Onboarding({ ctx }) {
 }
 
 // ---------- Login ----------
-function Login({ ctx }) {
-  const [email, setEmail] = useState(''); const [pw, setPw] = useState(''); const [show, setShow] = useState(false);
-  const [err, setErr] = useState({}); const [loading, setLoading] = useState(null); const [forgot, setForgot] = useState(false);
-  const [gErr, setGErr] = useState('');
+const GoogleG = () => html`<svg class="icon s" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.9 6.2C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.8c4.3-4 6.9-9.9 6.9-17.2z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.2C.9 16.6 0 20.2 0 24s.9 7.4 2.6 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.8c-2.1 1.4-4.8 2.3-8.5 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.2C6.6 42.6 14.6 48 24 48z"/></svg>`;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LOGIN_TEXT = {
+  login: { h: 'Log in', sub: 'Welcome back. Your reminders are waiting.', go: 'Log in', busy: 'Logging in…' },
+  signup: { h: 'Create account', sub: 'Your reminders are saved to your account, on any device.', go: 'Create account', busy: 'Creating account…' },
+  reset: { h: 'Reset password', sub: 'Enter your account email. We’ll send you a link to choose a new password.', go: 'Send reset link', busy: 'Sending…' },
+};
+function Login({ ctx, mode = 'login' }) {
+  const [email, setEmail] = useState(() => sessionStorage.getItem('rr-login-email') || '');
+  const [name, setName] = useState(''); const [pw, setPw] = useState(''); const [show, setShow] = useState(false);
+  const [err, setErr] = useState({}); const [loading, setLoading] = useState(null); const [sent, setSent] = useState('');
+  const t = LOGIN_TEXT[mode]; const real = !!ctx.auth;
+  useEffect(() => { setErr({}); setSent(''); setPw(''); }, [mode]);
+  // Keep the typed email when switching between log in / create account / reset.
+  const typeEmail = (v) => { setEmail(v); try { sessionStorage.setItem('rr-login-email', v); } catch (e) { /* ok */ } };
+  const fail = (e) => { const m = ctx.auth.friendly(e); if (m) setErr({ form: m }); };
   const enter = (which) => {
-    if (which === 'google' && ctx.signInGoogle) {
-      setGErr(''); setLoading('google');
-      ctx.signInGoogle().catch((e) => setGErr(window.RRCloud.friendly(e) || '')).finally(() => setLoading(null));
-      return;
-    }
+    setErr({});
+    if (which === 'google' && real) { setLoading('google'); ctx.auth.google().catch(fail).finally(() => setLoading(null)); return; }
     setLoading(which); setTimeout(() => (which === 'google' ? ctx.signIn('new', 'olena.shevchenko@gmail.com') : ctx.signIn('demo')), 800);
   };
   const submit = (e) => {
-    e.preventDefault(); const er = {};
-    if (!email.trim()) er.email = 'Enter your email so we can find your reminders.';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) er.email = 'This doesn’t look like an email yet. Try the format name@example.com.';
-    if (!pw) er.pw = 'Enter your password. In this demo any password works.';
-    setErr(er); if (Object.keys(er).length) { document.getElementById(er.email ? 'email' : 'pw').focus(); return; }
-    setLoading('login'); setTimeout(() => {
-      if (pw === 'wrong') { setLoading(null); setErr({ pw: 'That password doesn’t match. Check Caps Lock and try again, or use “Forgot password?”. Your email is kept.' }); document.getElementById('pw').focus(); return; }
-      ctx.signIn(email.trim().toLowerCase() === 'alex@example.com' || /^offline@/i.test(email.trim()) ? 'demo' : 'new', email.trim());
-    }, 800);
+    e.preventDefault(); const er = {}; const em = email.trim();
+    if (!em) er.email = 'Enter your email.';
+    else if (!EMAIL_RE.test(em)) er.email = 'This doesn’t look like an email yet. Try the format name@example.com.';
+    if (mode === 'signup' && !name.trim()) er.name = 'Enter your name, so we know what to call you.';
+    if (mode === 'signup' && pw.length < 8) er.pw = pw ? 'Use at least 8 characters.' : 'Choose a password: at least 8 characters.';
+    if (mode === 'login' && !pw) er.pw = 'Enter your password.';
+    setErr(er); const first = ['email', 'name', 'pw'].find((k) => er[k]); if (first) { document.getElementById(first).focus(); return; }
+    setLoading('form');
+    if (!real) { // no Firebase config: the old simulated sign-in
+      setTimeout(() => { setLoading(null); if (mode === 'reset') { setSent(em); return; } ctx.signIn(em.toLowerCase() === 'alex@example.com' ? 'demo' : 'new', em); }, 800); return;
+    }
+    const job = mode === 'reset' ? ctx.auth.reset(em).then(() => setSent(em))
+      : mode === 'signup' ? ctx.auth.signUp(em, pw, name.trim().replace(/\s+/g, ' ')) : ctx.auth.logIn(em, pw);
+    job.catch((x) => { if (mode === 'reset' && x && x.code === 'auth/user-not-found') { setSent(em); return; } fail(x); }).finally(() => setLoading(null));
   };
+  const field = (id, label, input, extra) => html`<div class="field">${extra || html`<label for=${id}>${label}</label>`}${input}
+    ${err[id] && html`<span class="msg err" id=${id + '-err'}><${Icon} n="info" c="xs" />${err[id]}</span>`}</div>`;
+  const inp = (id, type, value, set, ac, ph) => html`<input id=${id} class=${'input' + (err[id] ? ' err' : '')} type=${type} autocomplete=${ac} value=${value} onInput=${(e) => set(e.target.value)} aria-invalid=${!!err[id]} aria-describedby=${err[id] ? id + '-err' : undefined} placeholder=${ph} />`;
   return html`<div class="login">
     <div class="login-form">
-      <div class="row" style=${{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}><div class="brand" style=${{ padding: 0 }}><span class="brand-mark"><${Icon} n="bell" c="s" /></span>Renewal Reminder<${Demo} /></div></div>
+      <div class="row" style=${{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}><div class="brand" style=${{ padding: 0 }}><span class="brand-mark"><${Icon} n="bell" c="s" /></span>Renewal Reminder${mode === 'login' && html`<${Demo} />`}</div></div>
       <form onSubmit=${submit} noValidate aria-labelledby="login-h">
-        <h1 class="h1" id="login-h" style=${{ textAlign: 'center' }}>Log in</h1>
-        <${Btn} full iconR="arrow-right" loading=${loading === 'demo'} onClick=${() => enter('demo')}>Try the demo without signing up<//>
-        <div class="divider">or log in with email</div>
-        <div class="field"><label for="email">Email</label><input id="email" class=${'input' + (err.email ? ' err' : '')} type="email" autocomplete="email" value=${email} onInput=${(e) => setEmail(e.target.value)} aria-invalid=${!!err.email} aria-describedby=${err.email ? 'email-err' : undefined} placeholder="alex@example.com" />
-          ${err.email && html`<span class="msg err" id="email-err"><${Icon} n="info" c="xs" />${err.email}</span>`}</div>
-        <div class="field"><div class="row" style=${{ justifyContent: 'space-between' }}><label for="pw">Password</label><button type="button" class="link" onClick=${() => setForgot(true)}>Forgot password?</button></div>
-          <div class="input-wrap"><input id="pw" class=${'input' + (err.pw ? ' err' : '')} type=${show ? 'text' : 'password'} autocomplete="current-password" value=${pw} onInput=${(e) => setPw(e.target.value)} aria-invalid=${!!err.pw} aria-describedby=${err.pw ? 'pw-err' : undefined} />
-            <button type="button" class="btn ghost sm trail" aria-pressed=${show} onClick=${() => setShow(!show)}><${Icon} n="eye" c="s" />${show ? 'Hide' : 'Show'}</button></div>
-          ${err.pw ? html`<span class="msg err" id="pw-err"><${Icon} n="info" c="xs" />${err.pw}</span>` : null}
-          ${forgot && html`<span class="msg hint" role="status"><${Icon} n="info" c="xs" />In the real app we’d email you a reset link. Here, any password works.</span>`}</div>
-        <button type="submit" class="btn secondary full" disabled=${!!loading} aria-busy=${loading === 'login'}>${loading === 'login' ? html`<span class="spinner"></span>Logging in…` : 'Log in'}</button>
-        <${Btn} v="secondary" full loading=${loading === 'google'} onClick=${() => enter('google')}><span aria-hidden="true" style=${{ fontWeight: 700 }}>G</span> Continue with Google<//>
-        ${gErr && html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${gErr}</span>`}
+        <div class="col" style=${{ gap: 8, textAlign: 'center' }}><h1 class="h1" id="login-h">${t.h}</h1><p class="c2" style=${{ margin: 0 }}>${t.sub}</p></div>
+        ${mode === 'reset' && sent ? html`<div class="reason" role="status"><span class="cb"><${Icon} n="mail" /></span><div><b>Check your inbox</b><div class="small c2">If there’s an account for ${sent}, a reset link is on its way. It can take a minute; check spam too. Open the link, choose a new password, then log in.</div></div></div>
+          <${Btn} full onClick=${() => go('login')}>Back to log in<//>
+          <button type="button" class="link" style=${{ alignSelf: 'center' }} onClick=${() => setSent('')}>Use a different email</button>`
+        : html`
+        ${mode !== 'reset' && html`
+          <${Btn} full loading=${loading === 'google'} disabled=${!!loading} onClick=${() => enter('google')}><span class="g-mark"><${GoogleG} /></span>Continue with Google<//>
+          ${mode === 'login' && html`<${Btn} v="secondary" full iconR="arrow-right" loading=${loading === 'demo'} disabled=${!!loading} onClick=${() => enter('demo')}>Try the demo without signing up<//>`}
+          <div class="divider">${mode === 'signup' ? 'or create an account with email' : 'or log in with email'}</div>`}
+        ${field('email', 'Email', inp('email', 'email', email, typeEmail, 'email', 'name@example.com'))}
+        ${mode === 'signup' && field('name', 'Name', inp('name', 'text', name, setName, 'name', 'Your name'))}
+        ${mode !== 'reset' && field('pw', 'Password', html`<div class="input-wrap">${inp('pw', show ? 'text' : 'password', pw, setPw, mode === 'signup' ? 'new-password' : 'current-password', mode === 'signup' ? 'At least 8 characters' : '')}
+            <button type="button" class="btn ghost sm trail" aria-pressed=${show} aria-label=${show ? 'Hide password' : 'Show password'} onClick=${() => setShow(!show)}><${Icon} n="eye" c="s" />${show ? 'Hide' : 'Show'}</button></div>`,
+          mode === 'login' && html`<div class="row" style=${{ justifyContent: 'space-between' }}><label for="pw">Password</label><a class="link" href="#/reset">Forgot password?</a></div>`)}
+        ${err.form && html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${err.form}</span>`}
+        <button type="submit" class=${'btn full ' + (mode === 'reset' ? 'primary' : 'secondary')} disabled=${!!loading} aria-busy=${loading === 'form'}>${loading === 'form' ? html`<span class="spinner"></span>${t.busy}` : t.go}</button>
+        ${mode === 'signup' && html`<span class="small c3" style=${{ textAlign: 'center' }}>We’ll email you a link to confirm your address. You need it to get reminder emails.</span>`}`}
+        <p class="c2" style=${{ margin: 0, textAlign: 'center' }}>${mode === 'login' ? html`No account yet? <a class="link" href="#/signup">Create one</a>`
+          : mode === 'signup' ? html`Already have an account? <a class="link" href="#/login">Log in instead</a>`
+          : html`Remembered it? <a class="link" href="#/login">Back to log in</a>`}</p>
       </form>
     </div>
     <aside class="login-side" aria-label="Why Renewal Reminder">
@@ -469,8 +504,9 @@ function Drawer({ r, ctx, onClose }) {
   const sendTest = async () => {
     setMail({ s: 'sending', msg: '' });
     try { const d = await window.RRApi.sendReminder(r); setMail({ s: 'sent', msg: `Sent to ${d.to}. Check your inbox (and spam).` }); ctx.showToast(`Test email sent for ${r.name}`, `It went to ${d.to}.`, null); }
-    catch (e) { setMail({ s: 'error', msg: e.message }); }
+    catch (e) { setMail({ s: 'error', msg: e.message, code: e.code }); }
   };
+  const resend = () => ctx.auth.resendVerification().then(() => setMail({ s: 'sent', msg: `Confirmation link sent to ${R.USER.email}. Open it, then send the test email again.` })).catch((e) => setMail({ s: 'error', msg: ctx.auth.friendly(e) }));
   return html`<div class="scrim" onClick=${onClose}></div>
   <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-h" ref=${ref}>
     <div class="row gap12" style=${{ padding: 24, borderBottom: '1px solid var(--muted)' }}><${Logo} r=${r} size="lg" /><div class="grow"><h2 class="h2" id="dr-h">${r.name}</h2><span class="c2">${cat(r.category).one} · ${cyc(r.cycle).label}</span></div><button class="icon-btn" aria-label="Close details" onClick=${onClose} data-autofocus><${Icon} n="x" c="s" /></button></div>
@@ -491,8 +527,8 @@ function Drawer({ r, ctx, onClose }) {
       ${r.status !== 'cancelled' && html`<div class="col" style=${{ gap: 8 }}><b>Email reminder</b>
         ${R.CLOUD_ACCOUNT ? html`<span class="small c2">Send yourself the email you’d get before ${r.name} renews. It goes to ${R.USER.email}.</span>
         <div><${Btn} v="secondary" sm icon="mail" loading=${mail.s === 'sending'} onClick=${sendTest}>${mail.s === 'sending' ? 'Sending…' : 'Send test email'}<//></div>`
-        : html`<span class="small c2">Emails go to your own Google address. Sign in with Google to get them.</span>`}
-        <span aria-live="polite">${mail.s === 'sent' ? html`<span class="msg ok"><${Icon} n="circle-check" c="xs" />${mail.msg}</span>` : mail.s === 'error' ? html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${mail.msg}</span>` : ''}</span></div>`}
+        : html`<span class="small c2">Emails go to your own address. Log in with Google or a real email account to get them.</span>`}
+        <span aria-live="polite">${mail.s === 'sent' ? html`<span class="msg ok"><${Icon} n="circle-check" c="xs" />${mail.msg}</span>` : mail.s === 'error' ? html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${mail.msg}</span>${mail.code === 'unverified' && ctx.auth && html` <button type="button" class="link" onClick=${resend}>Send the confirmation link again</button>`}` : ''}</span></div>`}
       <div class="col gap12"><b>History</b>${[...r.history].reverse().map((h) => html`<div class="row gap12"><span class="logo sm" style=${{ background: 'var(--subtle)', color: 'var(--text-2)' }}><${Icon} n=${{ created: 'plus', reminded: 'bell', postponed: 'hourglass', cancelled: 'x', kept: 'check', edited: 'pencil' }[h.type] || 'info'} c="xs" /></span><div><div>${h.text}</div><div class="small c3">${fmt(h.date)}</div></div></div>`)}</div>
     </div>
     <div class="row" style=${{ padding: 24, borderTop: '1px solid var(--muted)', justifyContent: 'space-between' }}>

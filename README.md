@@ -19,11 +19,13 @@ Coursework prototype. Reminders are stored in your browser (`localStorage`); the
 
 | How you sign in | What you get |
 |---|---|
-| **Try the demo** or `alex@example.com` | Sample data; onboarding every time |
-| **Continue with Google** (real, Firebase) | Your own account: reminders are saved in the cloud (Firestore) and follow you to any device. Onboarding only on the first login. **Log out** signs you out and removes your reminders from that browser |
-| Any other email (simulated) | Empty local account, stored only in this browser |
+| **Continue with Google** (main way, real) | Your own account: reminders are saved in the cloud (Firestore) and follow you to any device. Onboarding only on the first login |
+| **Create account** with email, name and password (real) | The same kind of real account, without Google. Firebase emails a link to confirm the address (needed for reminder emails) |
+| **Log in** with email and password (real) | Opens your saved account. A wrong password shows “Email or password is wrong” |
+| **Forgot password?** | Firebase emails a link to choose a new password. The screen never says whether an account exists, so nobody can check other people's emails |
+| **Try the demo without signing up** | Sample data stored only in this browser; onboarding every time (unchanged) |
 
-For the simulated email login, any password works. Use the password `wrong` to see the login error state.
+**Log out** signs you out of a real account and removes its reminders from that browser.
 
 ## How it's built
 
@@ -34,7 +36,7 @@ For the simulated email login, any password works. Use the password `wrong` to s
 | `data.js` | Popular services (with links) and demo data |
 | `styles.css` | Styles |
 | `firebase-config.js` | Firebase project settings (public by design, not a secret) |
-| `cloud.js` | Google sign-in and saving each user's reminders in Firestore |
+| `cloud.js` | Google and email sign-in, password reset, and saving each user's reminders in Firestore |
 | `firestore.rules` | Database rules: each user can only read and write their own data |
 | `api.js` | Browser API client: calls only our own function `/api/send_reminder` |
 | `api/send_reminder.py` | Serverless function (Vercel, Python) that checks the request and sends the email through Resend |
@@ -67,7 +69,7 @@ In **Settings → Environment Variables** add `RESEND_API_KEY` as **Secret** (op
 - **The key lives only in environment variables**: `.env.local` on my computer and Vercel's encrypted Secret variables online. It is not in any code file.
 - **It never reaches GitHub**: `.gitignore` excludes `.env`, `.env.local` and `.env.*.local`. The repository only has `.env.example` with empty values, so others know which variables to set.
 - **It never reaches the browser**: only the server function reads `RESEND_API_KEY`. The browser calls `/api/send_reminder`; the key isn't in the page source, `app.js` or network requests.
-- **Each person gets only their own emails**: the email button exists only for Google accounts. The browser sends its Firebase sign-in token; the server asks Google who it belongs to and sends to that verified address. The browser can't choose the recipient, so the endpoint can't be used to email strangers, and one user never receives another user's reminders. Demo and email-login accounts don't get emails.
+- **Each person gets only their own emails**: the email button exists only for real accounts (Google or email). The browser sends its Firebase sign-in token; the server asks Google who it belongs to and sends to that confirmed address (email accounts must open the confirmation link first). The browser can't choose the recipient, so the endpoint can't be used to email strangers, and one user never receives another user's reminders. Demo accounts don't get emails.
 - **Free-plan limit**: Resend's free test sender (`onboarding@resend.dev`) only delivers to the Resend account owner. To email every user, verify a domain in Resend and set `RESEND_FROM` (e.g. `Renewal Reminder <hi@yourdomain.com>`). Until then, other users see a clear message instead of an email.
 - **Input is checked**: name length, date format, amount range and request size are validated; text is HTML-escaped before it goes into the email.
 - **Abuse is slowed down**: 5 emails per 10 minutes per user, and optionally only requests from my own site (`ALLOWED_ORIGIN`).
@@ -77,11 +79,11 @@ In **Settings → Environment Variables** add `RESEND_API_KEY` as **Secret** (op
 
 ### Accounts and the database (Firebase)
 
-- **Real Google sign-in** goes through Firebase Authentication; the app never sees your Google password.
+- **Real sign-in** (Google, or email + password) goes through Firebase Authentication. The app never sees the Google password, and email passwords are stored by Firebase (hashed), never in our code or database. Passwords need at least 8 characters; Firebase slows down repeated wrong attempts.
 - **The Firebase config is public on purpose.** Unlike the Resend key, it isn't a secret: it only names the project. Security comes from two other places:
   - **Database rules** (`firestore.rules`, published in Firebase): a signed-in user can read and write only `users/{their own id}`; everyone else is refused. Checked: an anonymous read or write gets `permission-denied`.
-  - **Authorized domains**: Google sign-in only works on `localhost` and the live Vercel site.
+  - **Authorized domains**: sign-in only works on `localhost` and the live Vercel site.
 - **Logging out** removes the user's reminders from the browser, so the next person on the same computer can't see them.
 - Data is stored in Firestore in Warsaw (`europe-central2`), the closest Google location to Ukraine.
 
-Known limits: the rate limit is kept in one server instance's memory, so it's best-effort; reminders are stored in the browser, not in a database.
+Known limits: the rate limit is kept in one server instance's memory, so it's best-effort; demo reminders are stored only in the browser.

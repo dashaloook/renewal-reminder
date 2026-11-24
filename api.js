@@ -1,7 +1,7 @@
 // Renewal Reminder — browser API client.
 // The browser only talks to our own server function (/api/send_reminder).
 // It never sees the email service's key and can't choose the recipient: it sends its
-// Google sign-in token, and the server emails the address that token belongs to.
+// sign-in token, and the server emails the address that token belongs to.
 (function () {
   const TIMEOUT = 15000;
 
@@ -10,7 +10,7 @@
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
     const reminder = { name: r.name, date: r.date, amount: Number(r.amount) || 0, cycle: r.cycle, daysLeft: window.RR.daysUntil(r.date) };
     const token = window.RRCloud && window.RRCloud.enabled ? await window.RRCloud.idToken() : null;
-    if (!token) throw new Error('Sign in with Google to get reminder emails.');
+    if (!token) throw new Error('Log in with Google or your email account to get reminder emails.');
     let res;
     try {
       res = await fetch('/api/send_reminder', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ reminder }), signal: ctrl.signal });
@@ -22,7 +22,7 @@
     try { data = await res.json(); } catch (e) { /* static host with no API: not JSON */ }
     if (res.ok && data.ok) return data;
     if ([404, 405, 501].includes(res.status) && !data.error) throw new Error('Email needs the server. Open the deployed site or run “python3 dev_server.py”.');
-    throw new Error(data.error || `Something went wrong (${res.status}). Try again.`);
+    const err = new Error(data.error || `Something went wrong (${res.status}). Try again.`); err.code = data.code; throw err;
   }
 
   window.RRApi = { sendReminder };
