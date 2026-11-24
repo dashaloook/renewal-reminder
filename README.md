@@ -61,7 +61,7 @@ Every morning at 08:00 Kyiv time (06:00 UTC) **Vercel Cron** runs `api/daily_rem
 
 Security: only Vercel can start the job (it sends `CRON_SECRET`; other requests get 401). The job reads the database with a Firebase service-account key stored only in Vercel (`FIREBASE_SERVICE_ACCOUNT`, Secret), never in the code, GitHub or the browser. It only reads, never writes, and never takes the recipient from the database (users could edit that). Errors are logged without email addresses.
 
-**Which service sends the email:** if `GMAIL_USER` and `GMAIL_APP_PASSWORD` are set in Vercel, emails go out through Gmail (SMTP with a Google App Password, not the real Gmail password). Gmail delivers to **every user's own address**, free, up to about 500 emails a day, so different people each get their own reminders. Otherwise the server falls back to Resend, whose free plan only reaches the Resend account owner until a domain is verified.
+**Which service sends the email:** if `GMAIL_USER` and `GMAIL_APP_PASSWORD` are set in Vercel, emails go out through Gmail (SMTP with a Google App Password, not the real Gmail password). Gmail delivers to **every user's own address**, free, up to about 500 emails a day, so different people each get their own reminders. Otherwise it uses **Brevo** if `BREVO_API_KEY` and `BREVO_SENDER` are set: free (300 emails a day), also reaches every user, no domain needed, and the sender address only has to be confirmed in Brevo. Last comes Resend, whose free plan only reaches the Resend account owner until a domain is verified.
 
 ## Run locally
 

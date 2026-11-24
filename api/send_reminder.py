@@ -3,8 +3,8 @@
 Runs as a Vercel Python serverless function, and locally through dev_server.py.
 
 Security model
-- Emails go out through Gmail (GMAIL_USER + GMAIL_APP_PASSWORD) when those are
-  set, otherwise through Resend (RESEND_API_KEY). The secrets are read from
+- Emails go out through Gmail (GMAIL_USER + GMAIL_APP_PASSWORD), else Brevo
+  (BREVO_API_KEY + BREVO_SENDER), else Resend (RESEND_API_KEY). The secrets are read from
   environment variables on the server. It is never sent to the browser and never written in the code.
 - The email goes to the signed-in person's own, confirmed address (Google or
   email account). The browser
@@ -137,13 +137,31 @@ def _send_gmail(app_password, sender, to, subject, text, body):
     return {"id": None}
 
 
+BREVO_URL = "https://api.brevo.com/v3/smtp/email"
+
+
+def _send_brevo(api_key, sender, to, subject, text, body):
+    """Send through Brevo's free plan (300/day). Reaches any address; the sender must be verified in Brevo."""
+    from email.utils import parseaddr
+    name, addr = parseaddr(sender)
+    payload = json.dumps({"sender": {"name": name or "Renewal Reminder", "email": addr}, "to": [{"email": to}],
+                          "subject": subject, "textContent": text, "htmlContent": body}).encode()
+    req = urllib.request.Request(BREVO_URL, data=payload, method="POST", headers={
+        "api-key": api_key, "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "renewal-reminder/1.0"})
+    with urllib.request.urlopen(req, timeout=10) as res:
+        return {"id": json.loads(res.read() or b"{}").get("messageId")}
+
+
 def mail_channel(env):
-    """Which email service to use: Gmail if its secrets are set, else Resend.
+    """Which email service to use: Gmail, then Brevo, then Resend — the first one that is set up.
     Returns (send_fn, secret, sender, name) or None if neither is set up."""
     g_user = env.get("GMAIL_USER", "").strip()
     g_pass = env.get("GMAIL_APP_PASSWORD", "").replace(" ", "").strip()
     if g_user and g_pass:
         return _send_gmail, g_pass, f"Renewal Reminder <{g_user}>", "gmail"
+    b_key, b_from = env.get("BREVO_API_KEY", "").strip(), env.get("BREVO_SENDER", "").strip()
+    if b_key and b_from:
+        return _send_brevo, b_key, f"Renewal Reminder <{b_from}>", "brevo"
     key = env.get("RESEND_API_KEY", "").strip()
     if key:
         return _send, key, env.get("RESEND_FROM", "").strip() or "Renewal Reminder <onboarding@resend.dev>", "resend"
@@ -161,11 +179,15 @@ def friendly_send_error(e):
         return "Gmail couldn’t deliver to this address.", None
     if isinstance(e, urllib.error.HTTPError):
         detail = e.read()[:500].decode("utf-8", "replace")
-        print(f"[mail] Resend HTTP {e.code}: {detail}")
+        print(f"[mail] {'Brevo' if 'brevo' in (e.url or '') else 'Resend'} HTTP {e.code}: {detail}")
+        if "sender" in detail.lower() and ("valid" in detail.lower() or "verif" in detail.lower()):
+            return "The email service doesn’t accept the sender yet. Confirm BREVO_SENDER in Brevo → Senders.", None
+        if "not yet activated" in detail.lower() or "account" in detail.lower() and "activ" in detail.lower():
+            return "The Brevo account isn’t activated for sending yet. Check Brevo for an activation message.", None
         if "your own email" in detail.lower() or "verify a domain" in detail.lower():
             return "The email service’s free plan can only email the app owner. To email everyone, the owner must verify a domain in Resend.", "owner_only"
-        if "api key" in detail.lower():
-            return "The email service rejected the server’s API key. Check RESEND_API_KEY in Vercel.", None
+        if "api key" in detail.lower() or "key not found" in detail.lower() or e.code == 401:
+            return "The email service rejected the server’s API key. Check the key in Vercel.", None
         return "The email service couldn’t send this email.", None
     print(f"[mail] send failed: {e!r}")
     return "Couldn’t reach the email service. Try again.", None
