@@ -139,6 +139,21 @@ def lookup_emails(sa, token, uids):
     return found
 
 
+def notif_copy(r, n, follow_up=False):
+    """Notification wording (same rules as notifCopy in app.js)."""
+    name = str(r.get("name", ""))[:80]
+    if follow_up:
+        return f"Time to decide on {name}", "You asked us to remind you today. It only takes a moment."
+    when = "today" if n <= 0 else "tomorrow" if n == 1 else f"in {n} days"
+    if r.get("category") == "document":
+        return f"{name} expires {when}", ("Check what you need to renew it." if n <= 0 else "Start renewing it now, so it doesn’t run out.")
+    per = {"weekly": " a week", "monthly": " a month", "yearly": " a year"}.get(r.get("cycle"), "")
+    amount = r.get("amount") or 0
+    ask = f"Still worth €{amount:,.2f}{per}?" if isinstance(amount, (int, float)) and amount > 0 else "Still need it?"
+    tail = "Decide before you’re charged." if n <= 0 else "Decide before tomorrow’s charge." if n == 1 else "Take a moment to decide."
+    return f"{name} renews {when}", f"{ask} {tail}"
+
+
 def send_push(sub, payload, private_key, subject):
     from pywebpush import webpush
     webpush(subscription_info=sub, data=json.dumps(payload), vapid_private_key=private_key,
@@ -202,8 +217,8 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
         if not subs or not vapid:
             summary["push_no_device"] += 1
             continue
-        when = "today" if n == 0 else "tomorrow" if n == 1 else f"in {n} days"
-        payload = {"title": f"{str(r['name'])[:80]} renews {when}", "body": f"Charge date: {d.strftime('%d %b')}. Click to decide: keep it, cancel it, or decide later.",
+        title, body = notif_copy(r, n, follow_up=r.get("status") == "unfinished" and r.get("followUp") == today.isoformat() and n != int(r.get("remind", 7) or 0))
+        payload = {"title": title, "body": body,
                    "tag": f"rr-{r.get('id', '')}-{today.isoformat()}", "url": "/#/dashboard", "id": str(r.get("id", ""))[:80] or None}
         for sub in subs:
             if dry:

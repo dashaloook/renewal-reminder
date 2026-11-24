@@ -5,6 +5,16 @@ const R = window.RR;
 
 // ---------- helpers ----------
 const money = (n) => '€' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Notification wording (same rules as the server's daily job, api/daily_reminders.py).
+const notifCopy = (r, followUp) => {
+  const n = R.daysUntil(r.date); const name = r.name;
+  if (followUp) return { title: `Time to decide on ${name}`, body: 'You asked us to remind you today. It only takes a moment.' };
+  const when = n <= 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`;
+  if (r.category === 'document') return { title: `${name} expires ${when}`, body: n <= 0 ? 'Check what you need to renew it.' : 'Start renewing it now, so it doesn’t run out.' };
+  const per = { weekly: ' a week', monthly: ' a month', yearly: ' a year' }[r.cycle] || '';
+  const ask = Number(r.amount) > 0 ? `Still worth ${money(r.amount)}${per}?` : 'Still need it?';
+  return { title: `${name} renews ${when}`, body: `${ask} ${n <= 0 ? 'Decide before you’re charged.' : n === 1 ? 'Decide before tomorrow’s charge.' : 'Take a moment to decide.'}` };
+};
 const remindTxt = (n) => (n === 0 ? 'on the day' : `${n} ${n === 1 ? 'day' : 'days'} before`);
 const fmt = (s, opts = { day: 'numeric', month: 'long' }) => R.parse(s).toLocaleDateString('en-GB', opts);
 const rel = (n) => n < -1 ? `${-n} days ago` : n === -1 ? 'Yesterday' : n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : `In ${n} days`;
@@ -219,7 +229,7 @@ function App() {
     update(() => ({ notif: true, bannerDismissed: true }));
     if (cloud && cloudUid && res.subscription) { try { await cloud.savePush(cloudUid, res.subscription); } catch (e) { /* not critical */ } }
     showToast('Notifications are on for this browser', res.error || (cloudUid ? 'We’ll notify this device on each reminder day, even when the app is closed.' : 'We’ll notify you on each reminder day while the app is open. Log in with a real account to get them when it’s closed.'), null);
-    pushApi.show('Notifications are on', 'This is how Renewal Reminder will remind you before a renewal.', 'welcome');
+    pushApi.show('You’re all set', 'We’ll nudge you here before anything renews, so you can decide in time.', 'welcome');
   };
   // Signed in on a device that already allows notifications: keep its push subscription up to date.
   useEffect(() => { if (cloudUid && notifOn && pushApi) pushApi.enable().then((r) => r.subscription && cloud.savePush(cloudUid, r.subscription)).catch(() => {}); }, [cloudUid]);
@@ -231,7 +241,7 @@ function App() {
     if (seen.day !== today) seen = { day: today, ids: [] };
     state.reminders.filter((r) => r.channel !== 'email' && r.status !== 'cancelled' && !seen.ids.includes(r.id)
       && ((R.daysUntil(r.date) >= 0 && R.daysUntil(r.date) === Number(r.remind)) || (r.status === 'unfinished' && r.followUp === today)))
-      .forEach((r) => { const n = R.daysUntil(r.date); pushApi.show(`${r.name} renews ${n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`}`, `Charge date: ${fmt(r.date)}. Click to decide: keep it, cancel it, or decide later.`, `rr-${r.id}-${today}`, r.id); seen.ids.push(r.id); });
+      .forEach((r) => { const c = notifCopy(r, r.status === 'unfinished' && r.followUp === today && R.daysUntil(r.date) !== Number(r.remind)); pushApi.show(c.title, c.body, `rr-${r.id}-${today}`, r.id); seen.ids.push(r.id); });
     try { localStorage.setItem('rr-notified', JSON.stringify(seen)); } catch (e) { /* ok */ }
   }, [notifOn, state.authed, state.reminders]);
 
@@ -561,7 +571,7 @@ function Drawer({ r, ctx, onClose }) {
     catch (e) { setMail({ s: 'error', msg: e.message, code: e.code }); }
   };
   const testNotif = async () => {
-    const n = R.daysUntil(r.date); const ok = await window.RRPush.show(`${r.name} renews ${n === 0 ? 'today' : n === 1 ? 'tomorrow' : n > 0 ? `in ${n} days` : 'soon'}`, `Charge date: ${fmt(r.date)}. Click to decide: keep it, cancel it, or decide later.`, 'test-' + r.id, r.id);
+    const c = notifCopy(r); const ok = await window.RRPush.show(c.title, c.body, 'test-' + r.id, r.id);
     setMail(ok ? { s: 'notif', msg: 'Test notification sent. Look at the corner of your screen.' } : { s: 'notif-err', msg: 'This browser didn’t show it. Check that notifications are allowed for this site.' });
   };
   const resend = () => ctx.auth.resendVerification().then(() => setMail({ s: 'sent', msg: `Confirmation link sent to ${R.USER.email}. Open it, then send the test email again.` })).catch((e) => setMail({ s: 'error', msg: ctx.auth.friendly(e) }));
