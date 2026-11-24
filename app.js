@@ -686,7 +686,7 @@ function ChannelNote({ r, ctx, on }) {
   if (ctx.state.notifBlocked) return box('bell-off', 'warn', html`<b>Notifications are blocked for this site.</b> To get this reminder on ${when}, allow them in your browser’s site settings — the icon to the left of the address.`);
   // Same box as the other messages: icon, bold lead, text — and a compact link to act.
   return box('bell', 'warn', html`<b>Remind you on ${when}?</b> Browser notifications are off. Allow them and this browser will remind you about ${r.name}${R.CLOUD_ACCOUNT ? ', even when the app is closed' : ''}.
-    <div style=${{ marginTop: 8 }}><button type="button" class="link" style=${{ fontSize: 14, fontWeight: 600 }} onClick=${ctx.enableNotifications}>Allow notifications</button></div>`);
+    <div style=${{ marginTop: 8 }}><button type="button" class="link" onClick=${ctx.enableNotifications}>Allow notifications</button></div>`);
 }
 
 // ---------- Decide later ----------
