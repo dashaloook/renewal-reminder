@@ -286,6 +286,7 @@ class handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(min(length, MAX_BODY + 1)) if length else b""
         ip = (self.headers.get("x-forwarded-for") or self.client_address[0] or "").split(",")[0].strip()
         status, out = process(self.command, self.headers, raw, ip)
+        print(f"[send_reminder] {self.command} -> {status} {out.get('code') or out.get('error') or 'ok'}")  # no email address in logs
         body = b"" if status == 204 else json.dumps(out).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
