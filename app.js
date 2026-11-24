@@ -664,7 +664,7 @@ function ChannelNote({ r, ctx, on }) {
   if (ctx.state.notif) return box('bell', 'ok', html`<b>Browser notification is set.</b> This browser will show a notification on ${when}${R.CLOUD_ACCOUNT ? ', even if the app is closed' : ' while the app is open'}.`);
   // Same look as the "Remind you…?" card on the form: clear question + a real button.
   return html`<div class="card pad20 col gap12" style=${{ width: '100%', textAlign: 'left', boxShadow: 'var(--shadow-s, 0 1px 2px rgba(22,19,43,.06))' }}>
-    <b class="row gap8" style=${{ alignItems: 'flex-start' }}><span class="cb" style=${{ marginTop: 2 }}><${Icon} n="bell" c="s" /></span>Remind you on ${when}?</b>
+    <b>Remind you on ${when}?</b>
     <span class="small c2">Browser notifications are off. Allow them and this browser will remind you about ${r.name} on ${when}${R.CLOUD_ACCOUNT ? ', even when the app is closed' : ''}.</span>
     <div class="row"><${Btn} v="ghost" sm icon="bell" style=${{ color: 'var(--brand)', marginLeft: -14 }} onClick=${ctx.enableNotifications}>Allow notifications<//></div>
   </div>`;
