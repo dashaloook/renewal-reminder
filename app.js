@@ -664,9 +664,9 @@ function ChannelNote({ r, ctx, on }) {
   if (ctx.state.notif) return box('bell', 'ok', html`<b>Browser notification is set.</b> This browser will show a notification on ${when}${R.CLOUD_ACCOUNT ? ', even if the app is closed' : ' while the app is open'}.`);
   // Same look as the "Remind you…?" card on the form: clear question + a real button.
   return html`<div class="card pad20 col gap12" style=${{ width: '100%', textAlign: 'left', boxShadow: 'var(--shadow-s, 0 1px 2px rgba(22,19,43,.06))' }}>
-    <b>Remind you on ${when}?</b>
+    <b class="row"><span class="cb"><${Icon} n="bell" c="s" /></span>Remind you on ${when}?</b>
     <span class="small c2">Browser notifications are off. Allow them and this browser will remind you about ${r.name} on ${when}${R.CLOUD_ACCOUNT ? ', even when the app is closed' : ''}.</span>
-    <div class="row"><${Btn} v="ghost" sm icon="bell" style=${{ color: 'var(--brand)', marginLeft: -14 }} onClick=${ctx.enableNotifications}>Allow notifications<//></div>
+    <div class="row"><${Btn} v="ghost" sm style=${{ color: 'var(--brand)', marginLeft: -14 }} onClick=${ctx.enableNotifications}>Allow notifications<//></div>
   </div>`;
 }
 
@@ -902,7 +902,7 @@ function CreateForm({ ctx, editId }) {
         <p class="body-l" style=${{ margin: 0 }}>${f.name && f.date ? (isDoc ? `${f.name} expires on ${fmt(f.date)}. ` : `${f.name} renews on ${fmt(f.date)}${f.amount && !amountBad ? `, ${money(amountNum)}` : ''}. `) + `We’ll remind you on ${fmt(remindDate)}.` : 'Add a name and date to see your reminder here.'}</p>
         ${f.date && html`<div class="col gap12">${[['circle-check', 'Reminder set', 'Today'], ['bell', `We remind you (${f.channel === 'email' ? 'email' : 'browser'})`, fmt(remindDate)], ['calendar', `${f.name || 'It'} ${isDoc ? 'expires' : 'renews'}${f.amount && !isDoc && !amountBad ? ' · ' + money(amountNum) : ''}`, fmt(f.date)]].map(([ic, l, d]) => html`<div class="row gap12"><span class="cb"><${Icon} n=${ic} c="s" /></span><div><div>${l}</div><div class="small c3">${d}</div></div></div>`)}</div>`}
       </div>
-      ${!ctx.state.notif && html`<div class="card pad20 col gap12"><b>Remind you ${remindTxt(f.remind)}${f.name ? ` ${f.name} renews` : ''}?</b><span class="small c2">Browser notifications are off. You can still save without them — we’ll show it on your dashboard.</span>
+      ${!ctx.state.notif && html`<div class="card pad20 col gap12"><b class="row"><span class="cb"><${Icon} n="bell" c="s" /></span>Remind you ${remindTxt(f.remind)}${f.name ? ` ${f.name} renews` : ''}?</b><span class="small c2">Browser notifications are off. You can still save without them — we’ll show it on your dashboard.</span>
         <div class="row"><${Btn} v="secondary" sm onClick=${ctx.enableNotifications}>Allow notifications<//><${Btn} v="ghost" sm onClick=${() => ctx.update(() => ({ bannerDismissed: true, notif: false }))}>Not now<//></div></div>`}
     </aside>
   </form>`;
