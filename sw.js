@@ -10,8 +10,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'Renewal Reminder';
   event.waitUntil(self.registration.showNotification(title, {
     body: data.body || 'A renewal is coming up. Open the app to decide.',
-    icon: '/duck-wave.png',
-    badge: '/duck-wave.png',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-96.png',
     tag: data.tag || 'renewal',
     data: { url: data.url || '/#/dashboard' },
   }));

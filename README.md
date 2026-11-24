@@ -42,6 +42,7 @@ Coursework prototype. Reminders are stored in your browser (`localStorage`); the
 | `api/send_reminder.py` | Serverless function (Vercel, Python) that checks the request and sends the email through Brevo |
 | `dev_server.py` | Local server: the app plus the same function, with secrets from `.env.local` |
 | `duck-wave.png`, `duck-empty.png` | Mascot illustrations |
+| `icons/`, `favicon.ico`, `manifest.webmanifest` | App icon (the duck on lavender) for the browser tab, notifications and Add to Dock / Home Screen |
 
 No build step.
 

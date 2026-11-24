@@ -43,8 +43,8 @@
 
   async function show(title, body, tag) {
     if (permission() !== 'granted') return false;
-    try { const reg = await registration(); await reg.showNotification(title, { body, icon: '/duck-wave.png', tag: tag || 'test', data: { url: '/#/dashboard' } }); return true; }
-    catch (e) { try { new Notification(title, { body, icon: '/duck-wave.png' }); return true; } catch (x) { return false; } }
+    try { const reg = await registration(); await reg.showNotification(title, { body, icon: '/icons/icon-192.png', badge: '/icons/badge-96.png', tag: tag || 'test', data: { url: '/#/dashboard' } }); return true; }
+    catch (e) { try { new Notification(title, { body, icon: '/icons/icon-192.png', badge: '/icons/badge-96.png' }); return true; } catch (x) { return false; } }
   }
 
   window.RRPush = { supported, canPush, permission, enable, show };
