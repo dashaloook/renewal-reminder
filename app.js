@@ -170,7 +170,8 @@ function App() {
     const id = uid(); setToast({ id, title, desc, undo: undoSnapshot });
     setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 6000);
   };
-  const undo = () => { if (toast && toast.undo) { setState((s) => ({ ...s, ...toast.undo })); setToast(null); } };
+  // Undo reverts the change and closes any open details/dialog, so you're back on the page you were on.
+  const undo = () => { if (toast && toast.undo) { setState((s) => ({ ...s, ...toast.undo })); setToast(null); setDrawer(null); setLater(null); setConfirm(null); } };
 
   const decide = (id, status) => {
     const snap = { reminders: state.reminders, stats: state.stats };
