@@ -20,7 +20,7 @@ Coursework prototype. Reminders are stored in your browser (`localStorage`); the
 | How you sign in | What you get |
 |---|---|
 | **Continue with Google** (main way, real) | Your own account: reminders are saved in the cloud (Firestore) and follow you to any device. Onboarding only on the first login |
-| **Create account** with email, name and password (real) | The same kind of real account, without Google. Firebase emails a link to confirm the address (needed for reminder emails) |
+| **Create account** (real), in two steps | 1) **Continue with Google**, or enter name and email and press **Continue**. 2) **Create your password** for that email: a live checklist shows the rules (8+ characters, an uppercase letter, a lowercase letter, a number); **Not you?** goes back. Firebase then emails a link to confirm the address (needed for reminder emails) |
 | **Log in** with email and password (real) | Opens your saved account. A wrong password shows “Email or password is wrong” |
 | **Forgot password?** | Firebase emails a link to choose a new password. The screen never says whether an account exists, so nobody can check other people's emails |
 | **Try the demo without signing up** | Sample data stored only in this browser; onboarding every time (unchanged) |
@@ -79,7 +79,7 @@ In **Settings → Environment Variables** add `RESEND_API_KEY` as **Secret** (op
 
 ### Accounts and the database (Firebase)
 
-- **Real sign-in** (Google, or email + password) goes through Firebase Authentication. The app never sees the Google password, and email passwords are stored by Firebase (hashed), never in our code or database. Passwords need at least 8 characters; Firebase slows down repeated wrong attempts.
+- **Real sign-in** (Google, or email + password) goes through Firebase Authentication. The app never sees the Google password, and email passwords are stored by Firebase (hashed), never in our code or database. New passwords need at least 8 characters with an uppercase letter, a lowercase letter and a number (checked in the app); Firebase slows down repeated wrong attempts.
 - **The Firebase config is public on purpose.** Unlike the Resend key, it isn't a secret: it only names the project. Security comes from two other places:
   - **Database rules** (`firestore.rules`, published in Firebase): a signed-in user can read and write only `users/{their own id}`; everyone else is refused. Checked: an anonymous read or write gets `permission-denied`.
   - **Authorized domains**: sign-in only works on `localhost` and the live Vercel site.
