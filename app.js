@@ -597,11 +597,13 @@ function MonthBars({ data }) {
 // The reminder's own note. row = list (2 lines max), card = Added/Saved card (own section under a divider).
 const NoteLine = ({ note, row, card }) => (note && note.trim()) ? html`<div class=${'note-line' + (row ? ' in-row' : '') + (card ? ' in-card' : '')} title=${row ? note : undefined}><span class="note-txt">${note.trim()}</span></div>` : null;
 function Row({ r, ctx, isNew }) {
-  return html`<button class=${'rrow' + (isNew ? ' is-new' : '')} onClick=${() => ctx.openDrawer(r.id)} aria-label=${`${isNew ? 'New reminder, ' : ''}${r.name}, ${amountLine(r)}, ${fmt(r.date)}, ${rel(R.daysUntil(r.date))}, ${r.status === 'unfinished' ? 'unfinished decision: ' + r.reason : r.status}${r.note ? ', note: ' + r.note : ''}`}>
+  // A div (not a <button>) so its text can be selected and copied; selecting doesn't open the details.
+  const open = () => { const sel = window.getSelection && String(window.getSelection()); if (!sel || !sel.trim()) ctx.openDrawer(r.id); };
+  return html`<div class=${'rrow' + (isNew ? ' is-new' : '')} role="button" tabindex="0" onClick=${open} onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ctx.openDrawer(r.id); } }} aria-label=${`${isNew ? 'New reminder, ' : ''}${r.name}, ${amountLine(r)}, ${fmt(r.date)}, ${rel(R.daysUntil(r.date))}, ${r.status === 'unfinished' ? 'unfinished decision: ' + r.reason : r.status}${r.note ? ', note: ' + r.note : ''}`}>
     <${Logo} r=${r} /><span class="nm grow col" style=${{ gap: 2 }}><span class="nm-line"><b class="h3" style=${{ fontSize: 16 }}>${r.name}</b><span class="nm-cat">/ ${cat(r.category).one}</span></span><${NoteLine} note=${r.note} row />${r.status === 'unfinished' && html`<span class="small cb row gap4 reason-inline"><${Icon} n="hourglass" c="xs" />Postponed: ${r.reason}</span>`}${(isNew || r.status === 'kept' || r.status === 'cancelled') && html`<span class="st-inline">${isNew ? html`<span class="badge t-brand">New</span>` : html`<${StatusBadge} r=${r} />`}</span>`}</span>
     <span class="amt"><b class="h3" style=${{ fontSize: 16, display: 'block' }}>${r.amount ? money(r.amount) : '—'}</b><span class="small c3">${r.category === 'document' ? 'Expires' : cyc(r.cycle).label}</span><span class="mob-badge"><${UrgBadge} r=${r} /></span></span>
     <span class="when"><span class="date">${fmt(r.date)}</span><${UrgBadge} r=${r} /></span><span class="st">${isNew ? html`<span class="badge t-brand">New</span>` : html`<${StatusBadge} r=${r} />`}${r.status === 'unfinished' && r.reason && html`<span class="st-reason">Postponed: ${r.reason}</span>`}</span><span class="chev c3"><${Icon} n="chevron-right" /></span>
-  </button>`;
+  </div>`;
 }
 
 // ---------- Drawer ----------

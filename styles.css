@@ -416,3 +416,6 @@ svg.icon{max-width:none}
 .badge-btn:hover{background:var(--brand);color:#fff}
 .badge-btn:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
 .menu .menu-sep{height:1px;background:var(--muted);margin:6px 12px}
+/* List rows are clickable but their text stays selectable/copyable */
+.rrow{cursor:pointer;user-select:text;-webkit-user-select:text}
+.rrow:focus-visible{outline:3px solid var(--brand);outline-offset:-3px}
