@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// Each signed-in person can read and write only their own document: users/{their uid}.
+// Everything else is closed. Publish this in Firebase → Firestore Database → Rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['reminders', 'stats', 'onboarded', 'notif', 'bannerDismissed', 'updatedAt'])
+        && request.resource.data.reminders is list
+        && request.resource.data.reminders.size() <= 500;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

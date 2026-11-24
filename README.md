@@ -20,9 +20,10 @@ Coursework prototype. Reminders are stored in your browser (`localStorage`); the
 | How you sign in | What you get |
 |---|---|
 | **Try the demo** or `alex@example.com` | Sample data; onboarding every time |
-| Any other email, or **Continue with Google** (simulated) | Empty account: no reminders or stats until you add them. Onboarding only on the first login |
+| **Continue with Google** (real, Firebase) | Your own account: reminders are saved in the cloud (Firestore) and follow you to any device. Onboarding only on the first login. **Log out** signs you out and removes your reminders from that browser |
+| Any other email (simulated) | Empty local account, stored only in this browser |
 
-Any password works. Use the password `wrong` to see the login error state.
+For the simulated email login, any password works. Use the password `wrong` to see the login error state.
 
 ## How it's built
 
@@ -32,6 +33,9 @@ Any password works. Use the password `wrong` to see the login error state.
 | `app.js` | The app: screens, routing (`#/dashboard`, `#/reminders`, `#/new`, `#/edit/:id`), state |
 | `data.js` | Popular services (with links) and demo data |
 | `styles.css` | Styles |
+| `firebase-config.js` | Firebase project settings (public by design, not a secret) |
+| `cloud.js` | Google sign-in and saving each user's reminders in Firestore |
+| `firestore.rules` | Database rules: each user can only read and write their own data |
 | `api.js` | Browser API client: calls only our own function `/api/send_reminder` |
 | `api/send_reminder.py` | Serverless function (Vercel, Python) that checks the request and sends the email through Resend |
 | `dev_server.py` | Local server: the app plus the same function, with secrets from `.env.local` |
@@ -68,5 +72,14 @@ In **Settings → Environment Variables** add `RESEND_API_KEY` and `REMINDER_TO_
 - **Errors don't leak details**: the email service's error replies are logged on the server; the browser gets a short message.
 - **Private files aren't served**: `.vercelignore` keeps `dev_server.py` and env files off the public site.
 - **If a key ever leaks**: revoke it in Resend, create a new one, and update it in Vercel.
+
+### Accounts and the database (Firebase)
+
+- **Real Google sign-in** goes through Firebase Authentication; the app never sees your Google password.
+- **The Firebase config is public on purpose.** Unlike the Resend key, it isn't a secret: it only names the project. Security comes from two other places:
+  - **Database rules** (`firestore.rules`, published in Firebase): a signed-in user can read and write only `users/{their own id}`; everyone else is refused. Checked: an anonymous read or write gets `permission-denied`.
+  - **Authorized domains**: Google sign-in only works on `localhost` and the live Vercel site.
+- **Logging out** removes the user's reminders from the browser, so the next person on the same computer can't see them.
+- Data is stored in Firestore in Warsaw (`europe-central2`), the closest Google location to Ukraine.
 
 Known limits: the rate limit is kept in one server instance's memory, so it's best-effort; reminders are stored in the browser, not in a database.

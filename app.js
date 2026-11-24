@@ -50,7 +50,7 @@ const P = {
 };
 const Icon = ({ n, c = '', label, style }) => html`<svg class=${'icon ' + c} style=${style} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden=${label ? undefined : 'true'} role=${label ? 'img' : undefined} aria-label=${label} dangerouslySetInnerHTML=${{ __html: P[n] || '' }}></svg>`;
 
-const Demo = () => html`<span class="demo-tag" role="note" title="Demo mode: all data is for demonstration" aria-label="Demo mode: all data is for demonstration">Demo</span>`;
+const Demo = () => R.CLOUD_ACCOUNT ? null : html`<span class="demo-tag" role="note" title="Demo mode: all data is for demonstration" aria-label="Demo mode: all data is for demonstration">Demo</span>`;
 const ServiceLink = ({ r }) => r.link
   ? html`<a class="link" href=${r.link} target="_blank" rel="noopener noreferrer" aria-label=${`Cancel on ${hostOf(r.link)} (opens in a new tab)`}>Cancel on ${hostOf(r.link)}<${Icon} n="external" c="xs" /></a>`
   : html`<a class="link" href=${'#/edit/' + r.id}>Add a cancel link<${Icon} n="plus" c="xs" /></a>`;
@@ -102,6 +102,32 @@ function App() {
   const [, bump] = useState(0);
   const route = useRoute();
   useEffect(() => { save(state); }, [state]);
+  // ---- Real accounts (Firebase). Only active when firebase-config.js has a config.
+  const cloud = window.RRCloud && window.RRCloud.enabled ? window.RRCloud : null;
+  const cloudUid = state.account === 'google' && state.user ? state.user.uid : null;
+  const cloudReady = useRef(false); // true once this user's data came from the cloud, so we never overwrite it with an empty list
+  const saveErr = useRef(false);
+  const cloudFields = (d) => ({ reminders: R.rollForward((d && d.reminders) || []), stats: (d && d.stats) || { onTime: 0, total: 0 }, onboarded: !!(d && d.onboarded), notif: !!(d && d.notif), bannerDismissed: !!(d && d.bannerDismissed) });
+  // After a reload: confirm the Google session is still valid and refresh the data from the cloud.
+  useEffect(() => cloud ? cloud.onUser(async (u) => {
+    const s = load(); if (!s || s.account !== 'google') return;
+    if (!u || (s.user && s.user.uid !== u.uid)) { cloudReady.current = false; setState((x) => (x.account === 'google' ? { ...freshState() } : x)); return; }
+    try { const d = await cloud.load(u.uid); cloudReady.current = true; setState((x) => (x.account === 'google' ? { ...x, ...cloudFields(d), user: u, loadFail: false } : x)); }
+    catch (e) { setState((x) => ({ ...x, loadFail: true })); }
+  }) : undefined, []);
+  // Save this user's reminders to the cloud (debounced).
+  useEffect(() => {
+    if (!cloud || !cloudUid || !state.authed || !cloudReady.current) return;
+    const t = setTimeout(() => { cloud.save(cloudUid, state).then(() => { saveErr.current = false; }).catch(() => { if (!saveErr.current) { saveErr.current = true; showToast('Couldn’t save to your account', 'Check your connection. Changes stay on this device and sync when you’re back online.', null); } }); }, 600);
+    return () => clearTimeout(t);
+  }, [state.reminders, state.stats, state.onboarded, state.notif, state.bannerDismissed, cloudUid, state.authed]);
+  const signInGoogle = async () => {
+    const u = await cloud.signInWithGoogle(); if (!u) return;
+    const d = await cloud.load(u.uid);
+    cloudReady.current = true;
+    setState((s) => ({ ...freshState(), ...cloudFields(d), account: 'google', user: u, authed: true, loadFail: false }));
+    go(d && d.onboarded ? 'dashboard' : 'onboarding');
+  };
   // Demo state switcher (same as ?state=loading|empty|error in the URL, but available from the profile menu)
   const setDemo = (s) => {
     QS = s || null;
@@ -110,7 +136,8 @@ function App() {
   };
   useEffect(() => { if (route[0] !== 'reminders') setAdded(null); }, [route[0]]);
 
-  Object.assign(R.USER, state.user || DEMO_USER);
+  Object.assign(R.USER, { photo: '' }, state.user || DEMO_USER);
+  R.CLOUD_ACCOUNT = state.account === 'google';
   const reminders = QS === 'empty' ? [] : state.reminders;
   const view = { ...state, reminders };
   const update = (fn) => setState((s) => ({ ...s, ...fn(s) }));
@@ -164,9 +191,13 @@ function App() {
     const returning = account === 'new' && state.account === 'new' && state.onboarded && state.user && state.user.email.toLowerCase() === (email || '').toLowerCase();
     go(returning ? 'dashboard' : 'onboarding');
   };
-  const logout = () => { update(() => ({ authed: false })); go('login'); };
+  const logout = () => {
+    // A real account: sign out of Google and remove its reminders from this device.
+    if (state.account === 'google') { cloudReady.current = false; if (cloud) cloud.signOut(); setState(freshState()); go('login'); return; }
+    update(() => ({ authed: false })); go('login');
+  };
 
-  const ctx = { state: view, update, decide, postpone, remove, upsert, openDrawer: setDrawer, openLater: setLater, showToast, reset, logout, signIn, confirm: setConfirm, added, setAdded, demo: QS, setDemo };
+  const ctx = { state: view, update, decide, postpone, remove, upsert, openDrawer: setDrawer, openLater: setLater, showToast, reset, logout, signIn, signInGoogle: cloud ? signInGoogle : null, confirm: setConfirm, added, setAdded, demo: QS, setDemo };
 
   // route guard
   let [page, param] = route;
@@ -213,7 +244,7 @@ function Shell({ ctx, page, children }) {
       <div class="side-head"><div class="brand"><span class="brand-mark"><${Icon} n="bell" c="s" /></span><span class="lbl col brand-txt"><span>Renewal Reminder</span><${Demo} /></span></div>
         <button class="side-toggle" aria-label=${collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title=${collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded=${!collapsed} aria-controls="side-nav" onClick=${toggleSide}><${Icon} n=${collapsed ? 'panel-open' : 'panel-close'} /></button></div>
       <nav class="nav" id="side-nav"><a href="#/dashboard" title=${collapsed ? 'Dashboard' : undefined} aria-current=${active === 'dashboard' ? 'page' : undefined}><${Icon} n="dashboard" /><span class="lbl">Dashboard</span></a><a href="#/reminders" title=${collapsed ? 'My reminders' : undefined} aria-current=${active === 'reminders' ? 'page' : undefined}><${Icon} n="list" /><span class="lbl">My reminders</span></a></nav>
-      <div class="profile">${menu && html`<${Menu} />`}<button class="profile-btn" aria-label=${collapsed ? `${R.USER.name}, account menu` : undefined} title=${collapsed ? R.USER.name : undefined} aria-haspopup="menu" aria-expanded=${menu} onClick=${() => setMenu(!menu)}><span class="avatar">${R.USER.initials}</span><span class="grow col lbl"><b style=${{ fontWeight: 600 }}>${R.USER.name}</b><span class="small c3">${R.USER.email}</span></span><span class="lbl row"><${Icon} n="chevron-down" c="s" /></span></button></div>
+      <div class="profile">${menu && html`<${Menu} />`}<button class="profile-btn" aria-label=${collapsed ? `${R.USER.name}, account menu` : undefined} title=${collapsed ? R.USER.name : undefined} aria-haspopup="menu" aria-expanded=${menu} onClick=${() => setMenu(!menu)}><span class="avatar">${R.USER.photo ? html`<img src=${R.USER.photo} alt="" referrerpolicy="no-referrer" width="36" height="36" style=${{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />` : R.USER.initials}</span><span class="grow col lbl"><b style=${{ fontWeight: 600 }}>${R.USER.name}</b><span class="small c3">${R.USER.email}</span></span><span class="lbl row"><${Icon} n="chevron-down" c="s" /></span></button></div>
     </aside>
     <main class="main" id="main">
       <div class="topbar no-desk">
@@ -243,7 +274,7 @@ const ONB_SERVICES = ['Netflix', 'Spotify Family', 'ChatGPT Plus', 'iCloud+'];
 function Onboarding({ ctx }) {
   const [step, setStep] = useState(1);
   const [reason, setReason] = useState('No access to account'); const [posted, setPosted] = useState(false);
-  const [sel, setSel] = useState(ctx.state.account === 'new' ? [] : ['Netflix', 'Spotify Family', 'ChatGPT Plus']);
+  const [sel, setSel] = useState(ctx.state.account === 'new' || ctx.state.account === 'google' ? [] : ['Netflix', 'Spotify Family', 'ChatGPT Plus']);
   const [why, setWhy] = useState(false); const [other, setOther] = useState(false); const [busy, setBusy] = useState(false);
   const services = ONB_SERVICES.map((n) => R.TEMPLATES.find((t) => t.name === n));
   const chosen = services.filter((s) => sel.includes(s.name)); const monthly = chosen.reduce((a, s) => a + s.amount, 0);
@@ -313,7 +344,15 @@ function Onboarding({ ctx }) {
 function Login({ ctx }) {
   const [email, setEmail] = useState(''); const [pw, setPw] = useState(''); const [show, setShow] = useState(false);
   const [err, setErr] = useState({}); const [loading, setLoading] = useState(null); const [forgot, setForgot] = useState(false);
-  const enter = (which) => { setLoading(which); setTimeout(() => (which === 'google' ? ctx.signIn('new', 'olena.shevchenko@gmail.com') : ctx.signIn('demo')), 800); };
+  const [gErr, setGErr] = useState('');
+  const enter = (which) => {
+    if (which === 'google' && ctx.signInGoogle) {
+      setGErr(''); setLoading('google');
+      ctx.signInGoogle().catch((e) => setGErr(window.RRCloud.friendly(e) || '')).finally(() => setLoading(null));
+      return;
+    }
+    setLoading(which); setTimeout(() => (which === 'google' ? ctx.signIn('new', 'olena.shevchenko@gmail.com') : ctx.signIn('demo')), 800);
+  };
   const submit = (e) => {
     e.preventDefault(); const er = {};
     if (!email.trim()) er.email = 'Enter your email so we can find your reminders.';
@@ -341,6 +380,7 @@ function Login({ ctx }) {
           ${forgot && html`<span class="msg hint" role="status"><${Icon} n="info" c="xs" />In the real app we’d email you a reset link. Here, any password works.</span>`}</div>
         <button type="submit" class="btn secondary full" disabled=${!!loading} aria-busy=${loading === 'login'}>${loading === 'login' ? html`<span class="spinner"></span>Logging in…` : 'Log in'}</button>
         <${Btn} v="secondary" full loading=${loading === 'google'} onClick=${() => enter('google')}><span aria-hidden="true" style=${{ fontWeight: 700 }}>G</span> Continue with Google<//>
+        ${gErr && html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${gErr}</span>`}
       </form>
     </div>
     <aside class="login-side" aria-label="Why Renewal Reminder">
@@ -494,17 +534,17 @@ function DecideLater({ r, ctx, onClose }) {
   const [reason, setReason] = useState(r.reason || ''); const [note, setNote] = useState(r.note || '');
   const opts = [['Tomorrow', 1], ['In 3 days', 3], ...(nextCharge ? [[passed ? 'The day before the next charge' : 'The day before the charge', n - 1]] : []), ['Next week', 7]].map(([l, d]) => ({ l, d, date: R.iso(R.addDays(R.today(), d)), ok: d >= 1 && d <= n }));
   const [pick, setPick] = useState((opts.find((o) => o.ok) || {}).date || ''); const [custom, setCustom] = useState(''); const [why, setWhy] = useState(''); const [err, setErr] = useState('');
-  const saved = useRef(false);
-  const close = () => { if (!saved.current) { const fu = R.iso(R.addDays(R.today(), Math.max(0, Math.min(1, n)))); ctx.postpone(r.id, reason || r.reason || 'Not decided yet', note, r.followUp || fu, true); } onClose(); };
+  // Cancelling or closing leaves the reminder exactly as it was; only “Save and remind me” changes it.
+  const close = onClose;
   const ref = useOverlay(close);
   const submit = () => {
     const fu = custom || pick; if (!fu) { setWhy('Choose when we should remind you.'); return; }
     if (R.daysUntil(fu) > n) { setWhy(`Pick a date on or before ${fmt(charge)} — after that, ${r.name} renews before you decide.`); return; }
-    saved.current = true; ctx.postpone(r.id, reason || 'Not decided yet', note, fu); onClose();
+    ctx.postpone(r.id, reason || 'Not decided yet', note, fu); onClose();
   };
   return html`<div class="scrim" onClick=${close}></div>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dl-h" ref=${ref}>
-    <div class="row gap12"><div class="grow"><h2 class="h2" id="dl-h">Decide later</h2><span class="c2">${r.name} · ${r.amount ? money(r.amount) + ' · ' : ''}renews ${fmt(r.date)} (${rel(n0).toLowerCase()})</span>${passed && html`<span class="msg warn" style=${{ display: 'flex', marginTop: 6 }}><${Icon} n="info" c="xs" />${n0 === 0 ? 'This charge is today' : 'This charge date has passed'}, so it may already have gone through. ${nextCharge ? `Pick a reminder before the next one on ${fmt(nextCharge)}.` : 'Pick when to remind you.'}</span>`}</div><button class="icon-btn" aria-label="Close. The item stays in Unfinished decisions." onClick=${close}><${Icon} n="x" c="s" /></button></div>
+    <div class="row gap12"><div class="grow"><h2 class="h2" id="dl-h">Decide later</h2><span class="c2">${r.name} · ${r.amount ? money(r.amount) + ' · ' : ''}renews ${fmt(r.date)} (${rel(n0).toLowerCase()})</span>${passed && html`<span class="msg warn" style=${{ display: 'flex', marginTop: 6 }}><${Icon} n="info" c="xs" />${n0 === 0 ? 'This charge is today' : 'This charge date has passed'}, so it may already have gone through. ${nextCharge ? `Pick a reminder before the next one on ${fmt(nextCharge)}.` : 'Pick when to remind you.'}</span>`}</div><button class="icon-btn" aria-label="Cancel. Nothing changes." onClick=${close}><${Icon} n="x" c="s" /></button></div>
     <div class="col gap12" role="radiogroup" aria-labelledby="dl-r"><b id="dl-r">What’s stopping you right now? <span class="c3" style=${{ fontWeight: 400 }}>(optional)</span></b><div class="row wrap">${R.REASONS.map((x) => html`<button class="chip" role="radio" aria-checked=${reason === x} data-autofocus=${x === R.REASONS[0] ? true : undefined} onClick=${() => { setReason(x); setErr(''); }}>${reason === x && html`<${Icon} n="check" c="s" />`}${x}</button>`)}</div>
       ${err && html`<span class="msg err"><${Icon} n="info" c="xs" />${err}</span>`}
       <label class="sr-only" for="dl-note">Note</label><input id="dl-note" class="input" placeholder=${reason === 'Other' ? 'What’s stopping you? (optional)' : 'Note for future you, e.g. “Ask Sam for the password” (optional)'} value=${note} onInput=${(e) => setNote(e.target.value)} /></div>
@@ -513,7 +553,7 @@ function DecideLater({ r, ctx, onClose }) {
         <span class="dot"></span><span class="grow"><span style=${{ display: 'block', fontWeight: 500 }}>${o.l}</span><span class="small c3">${o.d >= 1 ? fmt(o.date) + ', 9:00' : 'Not available'}${!o.ok && o.d >= 1 ? ' — after the charge' : ''}</span></span>${!o.ok && html`<${Icon} n="lock" c="s" />`}</button>`)}
       <div class="row gap12"><label for="dl-date" class="c2" style=${{ whiteSpace: 'nowrap' }}>Or pick a date</label><${DateField} id="dl-date" height=${40} min=${R.iso(R.addDays(R.today(), 1))} max=${charge} value=${custom} placeholder="Choose a date" onChange=${(v) => { setCustom(v); setWhy(v && R.daysUntil(v) > n ? `Pick a date on or before ${fmt(charge)} — after that, ${r.name} renews before you decide.` : ''); }} /></div>
       ${why && html`<span class="msg warn" role="alert"><${Icon} n="info" c="xs" />${why}</span>`}</div>
-    <div class="col gap12"><span class="small c3">Closing keeps ${r.name} in Unfinished decisions.</span><div class="row" style=${{ justifyContent: 'flex-end' }}><${Btn} v="ghost" onClick=${close}>Close<//><${Btn} icon="clock" onClick=${submit}>Save and remind me<//></div></div>
+    <div class="col gap12"><div class="row" style=${{ justifyContent: 'flex-end' }}><${Btn} v="ghost" onClick=${close}>Cancel<//><${Btn} icon="clock" onClick=${submit}>Save and remind me<//></div></div>
   </div>`;
 }
 function Confirm({ title, body, tip, ok, danger, onOk, onClose }) {
