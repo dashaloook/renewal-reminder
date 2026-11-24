@@ -203,8 +203,8 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
             summary["push_no_device"] += 1
             continue
         when = "today" if n == 0 else "tomorrow" if n == 1 else f"in {n} days"
-        payload = {"title": f"{str(r['name'])[:80]} renews {when}", "body": f"Charge date: {d.strftime('%d %b')}. Keep it, cancel it, or decide later.",
-                   "tag": f"rr-{r.get('id', '')}-{today.isoformat()}", "url": "/#/dashboard"}
+        payload = {"title": f"{str(r['name'])[:80]} renews {when}", "body": f"Charge date: {d.strftime('%d %b')}. Click to decide: keep it, cancel it, or decide later.",
+                   "tag": f"rr-{r.get('id', '')}-{today.isoformat()}", "url": "/#/dashboard", "id": str(r.get("id", ""))[:80] or None}
         for sub in subs:
             if dry:
                 summary["would_push"] = summary.get("would_push", 0) + 1

@@ -13,17 +13,23 @@ self.addEventListener('push', (event) => {
     icon: '/icons/icon-192.png',
     badge: '/icons/badge-96.png',
     tag: data.tag || 'renewal',
-    data: { url: data.url || '/#/dashboard' },
+    requireInteraction: !!data.id, // stays on screen until you act on it
+    data: { url: data.url || '/#/dashboard', id: data.id || null },
+    // Buttons inside the notification: Chrome/Edge show up to 2. Safari shows none (clicking opens the app).
+    actions: data.id ? [{ action: 'keep', title: 'Keep it' }, { action: 'later', title: 'Decide later' }] : [],
   }));
 });
 
-// Clicking the notification opens the app (or focuses it if it's already open).
+// Clicking the notification opens the app on that reminder; a button opens it with the decision
+// (Keep it = marked as kept, with Undo; Decide later = the postpone dialog).
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = new URL((event.notification.data && event.notification.data.url) || '/#/dashboard', self.location.origin).href;
+  const d = event.notification.data || {};
+  const url = new URL(d.url || '/#/dashboard', self.location.origin);
+  if (d.id) { url.searchParams.set('open', d.id); url.searchParams.set('act', event.action || 'open'); }
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
     const open = wins.find((w) => w.url.startsWith(self.location.origin));
-    if (open) { open.navigate(url); return open.focus(); }
-    return self.clients.openWindow(url);
+    if (open) return open.navigate(url.href).then((w) => (w || open).focus());
+    return self.clients.openWindow(url.href);
   }));
 });

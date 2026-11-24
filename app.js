@@ -231,11 +231,23 @@ function App() {
     if (seen.day !== today) seen = { day: today, ids: [] };
     state.reminders.filter((r) => r.channel !== 'email' && r.status !== 'cancelled' && !seen.ids.includes(r.id)
       && ((R.daysUntil(r.date) >= 0 && R.daysUntil(r.date) === Number(r.remind)) || (r.status === 'unfinished' && r.followUp === today)))
-      .forEach((r) => { const n = R.daysUntil(r.date); pushApi.show(`${r.name} renews ${n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`}`, `Charge date: ${fmt(r.date)}. Keep it, cancel it, or decide later.`, `rr-${r.id}-${today}`); seen.ids.push(r.id); });
+      .forEach((r) => { const n = R.daysUntil(r.date); pushApi.show(`${r.name} renews ${n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`}`, `Charge date: ${fmt(r.date)}. Click to decide: keep it, cancel it, or decide later.`, `rr-${r.id}-${today}`, r.id); seen.ids.push(r.id); });
     try { localStorage.setItem('rr-notified', JSON.stringify(seen)); } catch (e) { /* ok */ }
   }, [notifOn, state.authed, state.reminders]);
 
   const ctx = { state: view, update, decide, postpone, remove, upsert, openDrawer: setDrawer, openLater: setLater, showToast, reset, logout, signIn, auth, confirm: setConfirm, added, setAdded, demo: QS, setDemo, enableNotifications };
+  // Opened from a notification: /?open=<reminder id>&act=keep|later|open. Handled once this
+  // person's reminders have loaded (after sign-in too), then removed from the address.
+  const fromNotif = useRef((() => { try { const q = new URLSearchParams(location.search); return q.get('open') ? { id: q.get('open'), act: q.get('act') || 'open' } : null; } catch (e) { return null; } })());
+  useEffect(() => {
+    const p = fromNotif.current; if (!p || !state.authed) return;
+    const r = state.reminders.find((x) => x.id === p.id); if (!r) return;
+    fromNotif.current = null;
+    try { const u = new URL(location.href); u.searchParams.delete('open'); u.searchParams.delete('act'); history.replaceState(null, '', u.toString()); } catch (e) { /* ok */ }
+    if (p.act === 'keep' && r.status !== 'cancelled') decide(r.id, 'kept');
+    else if (p.act === 'later' && r.status !== 'cancelled') setLater(r.id);
+    else setDrawer(r.id);
+  }, [state.authed, state.reminders]);
 
   // route guard
   let [page, param] = route;
@@ -549,7 +561,7 @@ function Drawer({ r, ctx, onClose }) {
     catch (e) { setMail({ s: 'error', msg: e.message, code: e.code }); }
   };
   const testNotif = async () => {
-    const n = R.daysUntil(r.date); const ok = await window.RRPush.show(`${r.name} renews ${n === 0 ? 'today' : n === 1 ? 'tomorrow' : n > 0 ? `in ${n} days` : 'soon'}`, `Charge date: ${fmt(r.date)}. Keep it, cancel it, or decide later.`, 'test-' + r.id);
+    const n = R.daysUntil(r.date); const ok = await window.RRPush.show(`${r.name} renews ${n === 0 ? 'today' : n === 1 ? 'tomorrow' : n > 0 ? `in ${n} days` : 'soon'}`, `Charge date: ${fmt(r.date)}. Click to decide: keep it, cancel it, or decide later.`, 'test-' + r.id, r.id);
     setMail(ok ? { s: 'notif', msg: 'Test notification sent. Look at the corner of your screen.' } : { s: 'notif-err', msg: 'This browser didn’t show it. Check that notifications are allowed for this site.' });
   };
   const resend = () => ctx.auth.resendVerification().then(() => setMail({ s: 'sent', msg: `Confirmation link sent to ${R.USER.email}. Open it, then send the test email again.` })).catch((e) => setMail({ s: 'error', msg: ctx.auth.friendly(e) }));

@@ -73,6 +73,7 @@ Security: only Vercel can start the job (it sends `CRON_SECRET`; other requests 
 - **On the reminder day** the daily job sends a push to each of the user's devices for reminders set to **Browser**. The browser shows it even when the app is closed; clicking it opens the dashboard.
 - **While the app is open** it also shows today's browser reminders itself (once a day per reminder), which is how demo accounts get them.
 - **Send test notification** in a reminder's details shows one immediately.
+- **Acting on a notification:** clicking it opens the app on that reminder, with **Keep it / I cancelled it / Decide later**. Chrome and Edge also show two buttons inside the notification: **Keep it** (marks it kept, with Undo) and **Decide later** (opens the postpone dialog). Safari on Mac doesn't support buttons in website notifications, so there you click the notification. "I cancelled it" always happens in the app, because you first cancel on the service's own site.
 
 Security: pushes are signed with a VAPID key pair. The public key is in `push.js` (public by design); the private key is only in Vercel (`VAPID_PRIVATE_KEY`, Secret) and `.env.local`. The database rules only let a user write their own `push` list.
 
