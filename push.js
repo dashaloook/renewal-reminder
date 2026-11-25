@@ -9,7 +9,11 @@
 // - The VAPID public key below is public by design. The private key stays on the
 //   server (VAPID_PRIVATE_KEY in Vercel) and is never in this code.
 (function () {
-  const VAPID_PUBLIC_KEY = 'BAM_ONFCbXCYU0Jb3ab1XPXaPD1XDAtaI7IA3Mv0B6--FDzkQkTVrEem61QGwqkxctCrH26j1mhhGevctRv-niw';
+  // Live and test use different key pairs (the test private key is set only for Vercel Preview).
+  // Read when used: firebase-config.js (which sets RR_ENV) loads after this file.
+  const VAPID_PUBLIC_KEY = () => window.RR_ENV === 'test'
+    ? 'BNFEa-KssKRr_LPpZw-kJZbE1kWtotHuMEyFkUVAOeynCWqMiGNiX7KkqXxMJ6Chj2KICG3dbYrHqT1mD6NIBbI'
+    : 'BAM_ONFCbXCYU0Jb3ab1XPXaPD1XDAtaI7IA3Mv0B6--FDzkQkTVrEem61QGwqkxctCrH26j1mhhGevctRv-niw';
   const supported = 'Notification' in window && 'serviceWorker' in navigator;
   const canPush = supported && 'PushManager' in window;
 
@@ -33,7 +37,7 @@
       const reg = await registration();
       if (!canPush) return { ok: true };
       let sub = await reg.pushManager.getSubscription();
-      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC_KEY) });
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC_KEY()) });
       return { ok: true, subscription: sub.toJSON() };
     } catch (e) {
       // Permission is granted, but this browser couldn't subscribe to push (e.g. private window).

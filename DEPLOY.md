@@ -87,14 +87,21 @@ All are type **Secret** (write-only). Locally, the same names go in `.env.local`
 | `APP_URL` | optional | Base URL used in email links. Default `https://renewduck.vercel.app`. | Domain change. |
 | `FIREBASE_API_KEY` | optional | Overrides the public web key used to verify sign-in tokens. | — |
 
-The variables above are set for **Production** only. **Preview** (test copies, e.g. branch `dev`) has its own, non-secret settings:
+The variables above are set for **Production** only. **Preview** (test copies, e.g. branch `dev`) has its **own, separate values** — never reuse a live secret there (a test key can then be revoked without touching the live site):
 
 | Name (Preview) | Value |
 |---|---|
-| `FIREBASE_API_KEY` | the test project's public web key (same as `TEST` in `firebase-config.js`) |
-| `APP_URL` | `https://renewal-reminder-git-dev-dashaloook.vercel.app` |
+| `FIREBASE_API_KEY` | the test project's public web key (same as `TEST` in `firebase-config.js`) — Config |
+| `APP_URL` | `https://renewal-reminder-git-dev-dashaloook.vercel.app` — Config |
+| `VAPID_PRIVATE_KEY` | private half of the **test** push key pair; the public half is the test key in `push.js` — Secret |
+| `CRON_SECRET` | a separate random string — Secret |
+| `FIREBASE_SERVICE_ACCOUNT` | key of the **test** project's service account (Firebase → `renewal-reminder-test` → Service accounts) — Secret |
+| `BREVO_API_KEY`, `BREVO_SENDER` | ⏳ not set yet → **email is off on the test copy**. Create a separate Brevo key ("Renewal Reminder test", Transactional email only) and add both for Preview. |
 
-So on a test copy sign-in works against the test project, but **email and push are off** (no Brevo/VAPID keys) and the daily job never runs (Vercel Cron runs on Production only). To test email there, add `BREVO_API_KEY` + `BREVO_SENDER` for Preview; to test the "already sent" records too, add a `FIREBASE_SERVICE_ACCOUNT` generated in the **test** project — never the live one.
+Vercel Cron runs on Production only, so on the test copy the daily job runs only when you call it yourself:
+`curl -H "Authorization: Bearer <test CRON_SECRET>" "https://renewal-reminder-git-dev-dashaloook.vercel.app/api/daily_reminders?dry=1"` (previews are private — use a [protection bypass](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection) or open it in a browser where you're logged in to Vercel).
+
+**Never** tick Preview on a live secret, and never put the live `FIREBASE_SERVICE_ACCOUNT` on Preview — the test copy would then write to live data.
 
 **Changing a variable does nothing until the next deployment** — redeploy (push a commit, or Vercel → Deployments → Redeploy).
 
@@ -110,6 +117,11 @@ python3 -m unittest discover -s tests -v
 - No build step, no Node required. Python 3.9+.
 - **Locally the app uses the test Firebase project** (`firebase-config.js` picks the live project only on the live addresses), so you can't touch real users' data. Create test accounts freely.
 - Database rules tests need Node 20 + Java 21: `cd tests/rules && npm install && npm test` (they also run in CI on every pull request).
+- Browser tests (Playwright, 11 main user flows in the demo — nothing is sent anywhere):
+  ```bash
+  pip install -r tests/e2e/requirements.txt && python -m playwright install chromium
+  python -m pytest tests/e2e -v            # add --headed to watch; failures leave screenshots/traces in test-results/
+  ```
 - The daily job needs `pip install -r requirements.txt` only when actually sending push locally.
 
 ---
@@ -141,7 +153,7 @@ python3 -m unittest discover -s tests -v
 | **Test** | `dev` (or any branch → its own preview URL) | `renewal-reminder-git-dev-dashaloook.vercel.app` | test |
 | **Live** | `main` | `renewduck.vercel.app` | live |
 
-`main` is **protected**: changes only arrive through a pull request, and the three checks must pass first — *Server tests (Python)*, *Web app syntax (JS)*, *Database rules (Firebase emulator)* (`.github/workflows/ci.yml`). No direct pushes or force-pushes, admins included.
+`main` is **protected**: changes only arrive through a pull request, and the four checks must pass first — *Server tests (Python)*, *Web app syntax (JS)*, *Database rules (Firebase emulator)*, *Browser tests (Playwright)* (`.github/workflows/ci.yml`). No direct pushes or force-pushes, admins included.
 
 1. Work on `dev` (or a feature branch). Run `python3 -m unittest discover -s tests -v`.
 2. **Bump the cache-busting version** in `index.html` (all `?v=` values), otherwise browsers keep old JS/CSS:
@@ -150,7 +162,7 @@ python3 -m unittest discover -s tests -v
    ```
 3. Push → Vercel builds the test copy (~30 s) → try it on the test address (Vercel may ask you to log in: previews are private).
 4. If `firestore.rules` changed → publish them to the **test** project first, then (before merging) to the **live** project.
-5. Open a pull request into `main` (`gh pr create --base main --head dev`). Wait for the three checks → merge → Vercel deploys live.
+5. Open a pull request into `main` (`gh pr create --base main --head dev`). Wait for the four checks → merge → Vercel deploys live.
 6. Run the smoke test (§7).
 7. **Rollback:** Vercel → Deployments → pick the previous good deployment → *Promote to Production* (instant). Then revert the commit with a pull request.
 
@@ -225,7 +237,8 @@ Ordered by importance. ✅ = done, ⚠️ = needed for real users.
 ### Product / code quality
 - ⚠️ **Time zone:** the job uses `Europe/Kyiv` for everyone; store each user's time zone.
 - ⚠️ **Currency** fixed to EUR; **language** English only (consider Ukrainian).
-- ⚠️ No front-end build/tests: add a bundler (Vite) and E2E tests (Playwright) for sign-up, add reminder, decide, undo, delete account.
+- ✅ Browser tests (Playwright) for the main flows in the demo (`tests/e2e/`). Still to add: real sign-up / delete account against the **test** project, and a front-end bundler (Vite) with pinned libraries.
+- Search in the calendar view only looks at the month on screen (the list view searches everything) — consider searching all months.
 - ⚠️ Monitoring: Vercel runtime logs are short-lived — add error tracking (e.g. Sentry) and an uptime check, plus an alert when the daily job reports `failed > 0`.
 - `?v=` cache-busting is manual — a build step would hash file names automatically.
 - Remove the unused `Icon/note` component from the Figma library if not needed.
