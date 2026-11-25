@@ -1,18 +1,42 @@
 rules_version = '2';
 
-// Each signed-in person can read and write only their own document: users/{their uid}.
-// Everything else is closed. Publish this in Firebase → Firestore Database → Rules.
+// Each signed-in person can read and write only their own data: users/{their uid}
+// and the reminders under it. Everything else is closed.
+// Publish this in Firebase → Firestore Database → Rules after every change.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Profile: settings, stats and this user's push devices.
+    // `reminders` is the old all-in-one list, still allowed so existing accounts can be moved
+    // to one record per reminder on their next login (the app then removes it).
     match /users/{userId} {
-      allow read, delete: if request.auth != null && request.auth.uid == userId;
-      allow create, update: if request.auth != null
-        && request.auth.uid == userId
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId)
         && request.resource.data.keys().hasOnly(['reminders', 'stats', 'onboarded', 'notif', 'bannerDismissed', 'updatedAt', 'push'])
         && (!('reminders' in request.resource.data) || (request.resource.data.reminders is list && request.resource.data.reminders.size() <= 500))
         // push = this user's browser push subscriptions (one per device, at most 5)
         && (!('push' in request.resource.data) || (request.resource.data.push is list && request.resource.data.push.size() <= 5));
+
+      // One record per reminder, so two devices editing different reminders never overwrite each other.
+      match /reminders/{reminderId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && reminderId.size() <= 80
+          && request.resource.data.keys().hasOnly(['id', 'name', 'category', 'amount', 'cycle', 'date', 'remind', 'channel', 'link', 'note',
+                                                   'status', 'reason', 'followUp', 'tone', 'history', 'emailedOn', 'updatedAt'])
+          && request.resource.data.id == reminderId
+          && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
+          && request.resource.data.date is string && request.resource.data.date.size() == 10
+          && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 1000))
+          && (!('link' in request.resource.data) || (request.resource.data.link is string && request.resource.data.link.size() <= 500))
+          && (!('history' in request.resource.data) || (request.resource.data.history is list && request.resource.data.history.size() <= 200));
+      }
     }
+
     match /{document=**} {
       allow read, write: if false;
     }

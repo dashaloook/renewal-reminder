@@ -21,8 +21,12 @@
     db = firebase.firestore();
   }
 
-  // Only these fields are stored in the cloud; everything else stays local.
-  const FIELDS = ['reminders', 'stats', 'onboarded', 'notif', 'bannerDismissed'];
+  // Profile fields live in users/{uid}; each reminder is its own record in users/{uid}/reminders/{id}.
+  const FIELDS = ['stats', 'onboarded', 'notif', 'bannerDismissed'];
+  const R_FIELDS = ['id', 'name', 'category', 'amount', 'cycle', 'date', 'remind', 'channel', 'link', 'note', 'status', 'reason', 'followUp', 'tone', 'history', 'emailedOn'];
+  const pickR = (r) => clean(R_FIELDS.reduce((o, k) => (r[k] !== undefined ? { ...o, [k]: r[k] } : o), {}));
+  const sameR = (a, b) => JSON.stringify(pickR(a)) === JSON.stringify(pickR(b));
+  const validId = (id) => typeof id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(id);
   const pick = (s) => FIELDS.reduce((o, k) => (s[k] !== undefined ? { ...o, [k]: s[k] } : o), {});
   // Firestore rejects `undefined` values; JSON round-trip drops them.
   const clean = (o) => JSON.parse(JSON.stringify(o));
@@ -52,6 +56,14 @@
   };
 
   const ref = (uid) => db.collection('users').doc(uid);
+  const remRef = (uid) => ref(uid).collection('reminders');
+  const stamp = () => firebase.firestore.FieldValue.serverTimestamp();
+  // Firestore allows 500 writes per batch; stay well below.
+  async function commitInChunks(ops) {
+    for (let i = 0; i < ops.length; i += 400) {
+      const b = db.batch(); ops.slice(i, i + 400).forEach((op) => op(b)); await b.commit();
+    }
+  }
 
   window.RRCloud = {
     enabled,
@@ -97,20 +109,57 @@
         const res = await u.reauthenticateWithPopup(provider);
         if (res.user.uid !== u.uid) throw { code: 'auth/user-mismatch' };
       }
+      // Reminders are separate records: delete them first (deleting the profile doesn't delete them).
+      const rs = await remRef(u.uid).get();
+      await commitInChunks(rs.docs.map((d) => (b) => b.delete(d.ref)));
       await ref(u.uid).delete();
       await u.delete();
     },
     signOut: () => (auth ? auth.signOut() : Promise.resolve()),
     // Calls cb(user | null) now and whenever the session changes (e.g. after a reload).
     onUser: (cb) => (auth ? auth.onAuthStateChanged((u) => cb(u ? toUser(u) : null)) : () => {}),
+    // Profile + every reminder record. Accounts saved in the old all-in-one format are moved
+    // to one record per reminder here, once (then the old list is removed from the profile).
     async load(uid) {
-      const snap = await ref(uid).get();
-      return snap.exists ? snap.data() : null;
+      const [snap, rs] = await Promise.all([ref(uid).get(), remRef(uid).get()]);
+      const profile = snap.exists ? snap.data() : null;
+      let reminders = rs.docs.map((d) => d.data());
+      const legacy = profile && Array.isArray(profile.reminders) ? profile.reminders.filter((r) => r && validId(r.id)) : null;
+      if (legacy) {
+        const have = new Set(reminders.map((r) => r.id));
+        const move = legacy.filter((r) => !have.has(r.id));
+        await commitInChunks(move.map((r) => (b) => b.set(remRef(uid).doc(r.id), { ...pickR(r), updatedAt: stamp() })));
+        await ref(uid).update({ reminders: firebase.firestore.FieldValue.delete(), updatedAt: stamp() });
+        reminders = [...reminders, ...move.map(pickR)];
+      }
+      if (!profile && !reminders.length) return null;
+      const { reminders: _old, ...rest } = profile || {};
+      return { ...rest, reminders };
     },
-    save(uid, state) {
-      // merge: keeps fields this save doesn't own, like the push subscriptions below.
-      return ref(uid).set({ ...clean(pick(state)), updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    // Settings and stats only (merge keeps push devices).
+    saveProfile(uid, state) {
+      return ref(uid).set({ ...clean(pick(state)), updatedAt: stamp() }, { merge: true });
     },
+    // Write only what changed since the last sync: new/edited reminders are saved, removed ones deleted.
+    // `synced` (Map id → reminder) is what the cloud has; it is updated only after a successful write,
+    // so a failed save is retried next time. Another device's reminders are never touched.
+    async syncReminders(uid, list, synced) {
+      const now = new Map(list.filter((r) => validId(r.id)).map((r) => [r.id, r]));
+      const ops = []; const done = [];
+      now.forEach((r, id) => { const was = synced.get(id); if (!was || !sameR(was, r)) { ops.push((b) => b.set(remRef(uid).doc(id), { ...pickR(r), updatedAt: stamp() })); done.push(() => synced.set(id, r)); } });
+      synced.forEach((_, id) => { if (!now.has(id)) { ops.push((b) => b.delete(remRef(uid).doc(id))); done.push(() => synced.delete(id)); } });
+      if (!ops.length) return 0;
+      await commitInChunks(ops); done.forEach((f) => f()); return ops.length;
+    },
+    // Live updates from other devices: cb([{ type: 'set'|'delete', id, reminder }]). Own pending writes are skipped.
+    watchReminders(uid, cb) {
+      return remRef(uid).onSnapshot((snap) => {
+        const changes = snap.docChanges().filter((c) => !c.doc.metadata.hasPendingWrites)
+          .map((c) => (c.type === 'removed' ? { type: 'delete', id: c.doc.id } : { type: 'set', id: c.doc.id, reminder: pickR(c.doc.data()) }));
+        if (changes.length) cb(changes);
+      }, () => {});
+    },
+    sameReminder: sameR,
     // Remember this device's push subscription (max 5 devices), so the daily job can notify it.
     async savePush(uid, sub) {
       if (!sub || !sub.endpoint) return;

@@ -147,6 +147,36 @@ class DailyJobTests(unittest.TestCase):
         self.assertEqual(d.notif_copy({"name": "Passport", "category": "document"}, 30)[0], "Passport expires in 30 days")
         self.assertEqual(d.notif_copy({"name": "Netflix"}, 3, follow_up=True)[0], "Time to decide on Netflix")
 
+    def test_merge_old_and_new_formats(self):
+        profiles = {"a": {"reminders": [R(id="old"), R(id="both", name="Old name")], "push": ["p"]}, "c": {}}
+        docs = [("a", R(id="both", name="New name")), ("b", R(id="only-new"))]
+        merged = {uid: (sorted(r["id"] for r in rs), {r["id"]: r["name"] for r in rs}, push) for uid, rs, push in d.merge_users(profiles, docs)}
+        self.assertEqual(merged["a"][0], ["both", "old"])
+        self.assertEqual(merged["a"][1]["both"], "New name")      # per-reminder record wins
+        self.assertEqual(merged["a"][2], ["p"])
+        self.assertEqual(merged["b"][0], ["only-new"])             # reminders without a profile doc still count
+        self.assertEqual(merged["c"][0], [])
+
+    def test_load_users_pages_through_reminder_records(self):
+        root = "projects/p/databases/(default)/documents"
+        def doc(uid, rid):
+            return {"document": {"name": f"{root}/users/{uid}/reminders/{rid}", "fields": {"id": {"stringValue": rid}, "name": {"stringValue": rid}}}}
+        pages = [[doc("u1", f"r{i:03d}") for i in range(500)], [doc("u2", "x")]]
+        calls = []
+        def fake_call(url, token, body=None):
+            calls.append(body)
+            if body is None:
+                return {"documents": [{"name": f"{root}/users/u1", "fields": {"push": {"arrayValue": {}}}}]}
+            return pages[len([c for c in calls if c]) - 1]
+        real, d._call = d._call, fake_call
+        try:
+            users = dict((u, rs) for u, rs, _ in d.load_users({"project_id": "p"}, "t"))
+        finally:
+            d._call = real
+        self.assertEqual(len(users["u1"]), 500)
+        self.assertEqual([r["id"] for r in users["u2"]], ["x"])
+        self.assertIn("startAt", [c for c in calls if c][1]["structuredQuery"])   # 2nd page continues after the 1st
+
     def test_firestore_value_decoding(self):
         v = {"mapValue": {"fields": {"a": {"integerValue": "7"}, "b": {"arrayValue": {"values": [{"stringValue": "x"}]}}}}}
         self.assertEqual(d.decode(v), {"a": 7, "b": ["x"]})

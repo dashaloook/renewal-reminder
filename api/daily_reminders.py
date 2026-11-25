@@ -114,18 +114,48 @@ def _call(url, token, body=None):
         return json.loads(res.read() or b"{}")
 
 
+def merge_users(profiles, reminder_docs):
+    """Combine user profiles and per-reminder records into [(uid, reminders, push)].
+    profiles: {uid: fields}; reminder_docs: [(uid, reminder)]. A not-yet-moved old list in the
+    profile (`reminders`) is still included; the per-reminder record wins when both exist."""
+    per = {}
+    for uid, r in reminder_docs:
+        if isinstance(r, dict) and r.get("id"):
+            per.setdefault(uid, {})[r["id"]] = r
+    out = []
+    for uid in sorted(set(profiles) | set(per)):
+        fields = profiles.get(uid, {})
+        merged = {r["id"]: r for r in (fields.get("reminders") or []) if isinstance(r, dict) and r.get("id")}
+        merged.update(per.get(uid, {}))
+        out.append((uid, list(merged.values()), fields.get("push") or []))
+    return out
+
+
 def load_users(sa, token):
-    """[(uid, reminders, push_subscriptions)] for every user document."""
-    base = f"https://firestore.googleapis.com/v1/projects/{sa['project_id']}/databases/(default)/documents/users?pageSize=300"
-    out, page = [], ""
+    """[(uid, reminders, push_subscriptions)] — profiles plus every users/{uid}/reminders/{id} record."""
+    root = f"https://firestore.googleapis.com/v1/projects/{sa['project_id']}/databases/(default)/documents"
+    profiles, page = {}, ""
     while True:
-        data = _call(base + (f"&pageToken={urllib.parse.quote(page)}" if page else ""), token)
+        data = _call(f"{root}/users?pageSize=300" + (f"&pageToken={urllib.parse.quote(page)}" if page else ""), token)
         for doc in data.get("documents", []):
-            fields = {k: decode(v) for k, v in doc.get("fields", {}).items()}
-            out.append((doc["name"].rsplit("/", 1)[-1], fields.get("reminders") or [], fields.get("push") or []))
+            profiles[doc["name"].rsplit("/", 1)[-1]] = {k: decode(v) for k, v in doc.get("fields", {}).items()}
         page = data.get("nextPageToken")
         if not page:
-            return out
+            break
+    # All reminder records in one collection-group query, 500 at a time (cursor on the document name).
+    docs, last = [], None
+    while True:
+        q = {"from": [{"collectionId": "reminders", "allDescendants": True}], "orderBy": [{"field": {"fieldPath": "__name__"}}], "limit": 500}
+        if last:
+            q["startAt"] = {"values": [{"referenceValue": last}], "before": False}
+        rows = [r["document"] for r in _call(f"{root}:runQuery", token, {"structuredQuery": q}) if "document" in r]
+        for doc in rows:
+            parts = doc["name"].split("/documents/")[1].split("/")  # users/{uid}/reminders/{id}
+            if len(parts) == 4 and parts[0] == "users":
+                docs.append((parts[1], {k: decode(v) for k, v in doc.get("fields", {}).items()}))
+        if len(rows) < 500:
+            return merge_users(profiles, docs)
+        last = rows[-1]["name"]
 
 
 def lookup_emails(sa, token, uids):

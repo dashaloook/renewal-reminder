@@ -123,24 +123,55 @@ function App() {
   const cloudUid = isCloud(state.account) && state.user ? state.user.uid : null;
   const cloudReady = useRef(false); // true once this user's data came from the cloud, so we never overwrite it with an empty list
   const saveErr = useRef(false);
+  // What the cloud currently has for each reminder (id → reminder). Saves write only the difference.
+  const synced = useRef(new Map());
+  const [liveTick, setLiveTick] = useState(0); // bumps when the cloud data is (re)loaded, to (re)start live sync
+  const markSynced = (d) => { synced.current = new Map(((d && d.reminders) || []).map((r) => [r.id, r])); setLiveTick((n) => n + 1); };
   const cloudFields = (d) => ({ reminders: R.rollForward((d && d.reminders) || []), stats: (d && d.stats) || { onTime: 0, total: 0 }, onboarded: !!(d && d.onboarded), notif: !!(d && d.notif), bannerDismissed: !!(d && d.bannerDismissed) });
   // After a reload: confirm the Google session is still valid and refresh the data from the cloud.
   useEffect(() => cloud ? cloud.onUser(async (u) => {
     const s = load(); if (!s || !isCloud(s.account)) return;
     if (!u || (s.user && s.user.uid !== u.uid)) { cloudReady.current = false; setState((x) => (isCloud(x.account) ? { ...freshState() } : x)); return; }
-    try { const d = await cloud.load(u.uid); cloudReady.current = true; setState((x) => (isCloud(x.account) ? { ...x, ...cloudFields(d), user: u, loadFail: false } : x)); }
+    try { const d = await cloud.load(u.uid); markSynced(d); cloudReady.current = true; setState((x) => (isCloud(x.account) ? { ...x, ...cloudFields(d), user: u, loadFail: false } : x)); }
     catch (e) { setState((x) => ({ ...x, loadFail: true })); }
   }) : undefined, []);
-  // Save this user's reminders to the cloud (debounced).
+  const saveFailed = () => { if (!saveErr.current) { saveErr.current = true; showToast('Couldn’t save to your account', 'Check your connection. Changes stay on this device and sync when you’re back online.', null); } };
+  // Save settings/stats (debounced).
   useEffect(() => {
     if (!cloud || !cloudUid || !state.authed || !cloudReady.current) return;
-    const t = setTimeout(() => { cloud.save(cloudUid, state).then(() => { saveErr.current = false; }).catch(() => { if (!saveErr.current) { saveErr.current = true; showToast('Couldn’t save to your account', 'Check your connection. Changes stay on this device and sync when you’re back online.', null); } }); }, 600);
+    const t = setTimeout(() => { cloud.saveProfile(cloudUid, state).then(() => { saveErr.current = false; }).catch(saveFailed); }, 600);
     return () => clearTimeout(t);
-  }, [state.reminders, state.stats, state.onboarded, state.notif, state.bannerDismissed, cloudUid, state.authed]);
+  }, [state.stats, state.onboarded, state.notif, state.bannerDismissed, cloudUid, state.authed]);
+  // Save reminders (debounced): only the ones that changed on this device are written or deleted,
+  // so another device's edits to other reminders are never overwritten.
+  useEffect(() => {
+    if (!cloud || !cloudUid || !state.authed || !cloudReady.current) return;
+    const t = setTimeout(() => { cloud.syncReminders(cloudUid, state.reminders, synced.current).then(() => { saveErr.current = false; }).catch(saveFailed); }, 600);
+    return () => clearTimeout(t);
+  }, [state.reminders, cloudUid, state.authed]);
+  // Live: changes made on other devices appear here right away.
+  useEffect(() => {
+    if (!cloud || !cloudUid || !cloudReady.current) return;
+    return cloud.watchReminders(cloudUid, (changes) => {
+      const fresh = changes.filter((c) => (c.type === 'delete' ? synced.current.has(c.id) : !(synced.current.has(c.id) && cloud.sameReminder(synced.current.get(c.id), c.reminder))));
+      if (!fresh.length) return;
+      fresh.forEach((c) => (c.type === 'delete' ? synced.current.delete(c.id) : synced.current.set(c.id, c.reminder)));
+      setState((x) => {
+        if (!isCloud(x.account)) return x;
+        let list = x.reminders;
+        fresh.forEach((c) => {
+          if (c.type === 'delete') list = list.filter((r) => r.id !== c.id);
+          else { const r = R.rollForward([c.reminder])[0]; list = list.some((o) => o.id === c.id) ? list.map((o) => (o.id === c.id ? r : o)) : [...list, r]; }
+        });
+        return { ...x, reminders: list };
+      });
+    });
+  }, [cloudUid, liveTick]);
   // After any real sign-in: load this person's reminders and open the app.
   const enterCloud = async (u) => {
     if (!u) return;
     const d = await cloud.load(u.uid);
+    markSynced(d);
     cloudReady.current = true;
     setState((s) => ({ ...freshState(), ...cloudFields(d), account: u.provider, user: u, authed: true, loadFail: false }));
     go(d && d.onboarded ? 'dashboard' : 'onboarding');
