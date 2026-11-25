@@ -14,7 +14,7 @@ Everything a developer needs to run, deploy, verify and hand over this app — a
  Browser (index.html, app.js, …)                       Vercel (renewduck.vercel.app)
  ─────────────────────────────────                     ─────────────────────────────────────────────
  React UI ──── Firebase Auth (Google / email) ───────▶ /__/auth/*  → proxied to Firebase (own sign-in domain)
-     │         Firestore: users/{uid} (rules)
+     │         Firestore: users/{uid} (profile) + users/{uid}/reminders/{id} (one record per reminder; rules)
      │
      ├── POST /api/send_reminder  (Firebase ID token) ─▶ api/send_reminder.py ──▶ Brevo API ──▶ user's inbox
      │                                                    checks token with Google, sends to the
@@ -30,7 +30,7 @@ Everything a developer needs to run, deploy, verify and hand over this app — a
 | `index.html` | Loads everything. Script/style URLs carry `?v=<timestamp>` for cache-busting — **bump it on every release** (see §6). |
 | `app.js` | The whole UI (React + htm). Routing by hash (`#/dashboard`, `#/reminders`, `#/new`, `#/edit/<id>`, `#/login`, `#/signup`, `#/reset`). |
 | `data.js` | Date helpers, demo seed data, analytics, `rollForward`. |
-| `cloud.js` | Firebase: sign-in (Google, email), password reset, account deletion, load/save `users/{uid}`, push subscriptions. |
+| `cloud.js` | Firebase: sign-in (Google, email), password reset, account deletion, profile in `users/{uid}`, one record per reminder in `users/{uid}/reminders/{id}` (writes only changes, live updates from other devices, one-time move of old accounts), push subscriptions. |
 | `api.js` | Browser client for `/api/send_reminder`. |
 | `push.js`, `sw.js` | Notification permission, push subscription, service worker that shows pushes and handles clicks. |
 | `firebase-config.js` | Public Firebase web config (not a secret). `authDomain` = our domain. |
@@ -44,6 +44,15 @@ Everything a developer needs to run, deploy, verify and hand over this app — a
 | `tests/test_api.py` | Server tests (stdlib only). |
 
 ---
+
+### Data model (Firestore)
+
+| Path | Contents |
+|---|---|
+| `users/{uid}` | `stats`, `onboarded`, `notif`, `bannerDismissed`, `push` (≤ 5 devices), `updatedAt`. Old accounts may still have `reminders` (list) until their next login moves it. |
+| `users/{uid}/reminders/{id}` | One reminder: `id, name, category, amount, cycle, date, remind, channel, link, note, status, reason, followUp, tone, history, emailedOn, updatedAt`. |
+
+Deleting an account deletes every `reminders/*` record first, then the profile, then the login. The daily job reads all reminder records with one paged collection-group query and still includes old lists that haven't been moved yet.
 
 ## 2. Services & accounts
 
@@ -143,7 +152,8 @@ Daily-job switches (need `CRON_SECRET`): `?dry=1` (report only) · `?only=email`
 ## 8. Security model (what protects what)
 
 - **Secrets** only in Vercel env vars / `.env.local`; `.gitignore` and `.vercelignore` keep `.env*` out of GitHub and the public site.
-- **Firebase web config is public by design.** Protection = Firestore rules (each user can read/write/delete only `users/{own uid}`, fields whitelisted, sizes capped) + authorized domains.
+- **Firebase web config is public by design.** Protection = Firestore rules (each user can read/write/delete only `users/{own uid}` and `users/{own uid}/reminders/*`; every reminder record checked for owner, allowed fields and sizes) + authorized domains.
+- **No lost edits between devices:** one record per reminder; each device writes only what it changed (tested: an offline device editing one reminder no longer deletes a reminder added on another device).
 - **Email API** sends only to the caller's own confirmed address (ID token verified with Google), validates and HTML-escapes input, rate-limits 5 per 10 min per user, never returns provider errors to the browser.
 - **Daily job** runs only with `CRON_SECRET`; uses a service account read-only; never takes recipients from the database.
 - **Account deletion** re-authenticates (Google popup or password), deletes the Firestore doc, then the login.

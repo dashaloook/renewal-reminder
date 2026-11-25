@@ -120,7 +120,8 @@ In **Settings → Environment Variables** add `BREVO_API_KEY` and `BREVO_SENDER`
 
 - **Real sign-in** (Google, or email + password) goes through Firebase Authentication. The app never sees the Google password, and email passwords are stored by Firebase (hashed), never in our code or database. New passwords need at least 8 characters with an uppercase letter, a lowercase letter and a number (checked in the app); Firebase slows down repeated wrong attempts.
 - **The Firebase config is public on purpose.** Unlike the Brevo key, it isn't a secret: it only names the project. Security comes from two other places:
-  - **Database rules** (`firestore.rules`, published in Firebase): a signed-in user can read and write only `users/{their own id}`; everyone else is refused. Checked: an anonymous read or write gets `permission-denied`.
+  - **Database rules** (`firestore.rules`, published in Firebase): a signed-in user can read and write only `users/{their own id}` and the reminder records under it; every reminder record is checked (owner, allowed fields, sizes). Everyone else is refused.
+- **One record per reminder** (`users/{uid}/reminders/{id}`): each device writes only the reminders it changed and deletes only the ones removed on it, so two devices never overwrite each other's edits; changes from other devices appear live. Accounts saved in the old all-in-one format are moved automatically on their next login.
   - **Authorized domains**: sign-in only works on `localhost` and the live Vercel site.
   - **Own sign-in address**: Google's sign-in window shows `renewduck.vercel.app`, not Firebase's default address. `vercel.json` passes `/__/auth/*` through to Firebase, and that address is registered as a redirect URI for the Google OAuth client.
 - **Logging out** removes the user's reminders from the browser, so the next person on the same computer can't see them.
