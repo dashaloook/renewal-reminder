@@ -32,7 +32,8 @@ spec = importlib.util.spec_from_file_location("send_reminder", os.path.join(ROOT
 api = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(api)
 
-ENV = {**os.environ, **load_env(os.path.join(ROOT, ".env.local"))}
+# RR_ENV_FILE lets the browser tests point this at an empty file, so they never read local secrets.
+ENV = {**os.environ, **load_env(os.environ.get("RR_ENV_FILE") or os.path.join(ROOT, ".env.local"))}
 PRIVATE = {".env", ".env.local", "dev_server.py"}
 
 
