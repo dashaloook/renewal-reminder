@@ -5,3 +5,5 @@ dev_server.py
 .claude/
 tests/
 DEPLOY.md
+.github/
+firebase.json
