@@ -33,7 +33,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from send_reminder import build_email, mail_channel, friendly_send_error  # noqa: E402  (shared email code)
+from send_reminder import build_email, mail_channel, friendly_send_error, SentLedger, sent_key  # noqa: E402  (shared email code)
 
 TZ = "Europe/Kyiv"
 SCOPES = ["https://www.googleapis.com/auth/datastore", "https://www.googleapis.com/auth/identitytoolkit",
@@ -192,7 +192,7 @@ def send_push(sub, payload, private_key, subject):
 
 # ---------- the job ----------
 
-def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=None, push_fn=None, only=None):
+def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=None, push_fn=None, only=None, ledger=None):
     """Pure job logic: returns (status, summary). Injectable for tests."""
     env = os.environ if env is None else env
     channel = mail_channel(env)
@@ -207,6 +207,9 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
     try:
         token = None if load_fn else _token(sa)
         users = (load_fn or (lambda: load_users(sa, token)))()
+        # "Already sent" records: tests pass a fake; in production the job uses Firestore.
+        if ledger is None and not load_fn:
+            ledger = SentLedger(sa["project_id"], token)
     except Exception as e:
         print(f"[daily] couldn't read the database: {e!r}")
         return 502, {"error": "Couldn’t read the database. Check FIREBASE_SERVICE_ACCOUNT."}
@@ -221,11 +224,37 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
     send = send_fn or send
     summary = {"service": service, "date": today.isoformat(), "users": len(users), "due": len(due_mail), "sent": 0,
                "skipped_unconfirmed": 0, "failed": 0, "dry": dry,
-               "push_due": len(due_push), "push_sent": 0, "push_failed": 0, "push_no_device": 0}
+               "push_due": len(due_push), "push_sent": 0, "push_failed": 0, "push_no_device": 0, "already_sent": 0}
+    day = today.isoformat()
+
+    def claimed(uid, r, kind):
+        """True = we own today's send for this reminder (or no ledger). False = already sent → skip."""
+        if not ledger:
+            return True
+        key = sent_key(uid, r.get("id", ""), day, kind)
+        if dry:
+            return not ledger.exists(key)
+        return ledger.claim(key, {"uid": uid, "reminderId": r.get("id", ""), "date": day, "kind": kind, "by": "daily"})
+
+    def unclaim(uid, r, kind):
+        if ledger and not dry:
+            try:
+                ledger.release(sent_key(uid, r.get("id", ""), day, kind))
+            except Exception as e:
+                print(f"[daily] couldn't release a sent record: {e!r}")
     for uid, r, d, n, _ in due_mail:
         to = emails.get(uid)
         if not to:
             summary["skipped_unconfirmed"] += 1
+            continue
+        try:
+            mine = claimed(uid, r, "email")
+        except Exception as e:  # can't check → don't risk a duplicate; it is reported as failed
+            print(f"[daily] couldn't check sent records: {e!r}")
+            summary["failed"] += 1
+            continue
+        if not mine:
+            summary["already_sent"] += 1
             continue
         if dry:
             summary["would_send"] = summary.get("would_send", 0) + 1
@@ -240,6 +269,7 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
             print(f"[daily] send failed for user {uid[:6]}…")  # no email address in logs
             friendly_send_error(e)
             summary["failed"] += 1
+            unclaim(uid, r, "email")  # let a later run retry
 
     vapid = env.get("VAPID_PRIVATE_KEY", "").strip()
     push = push_fn or send_push
@@ -249,6 +279,16 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
             summary["push_no_device"] += 1
             continue
         title, body = notif_copy(r, n, follow_up=r.get("status") == "unfinished" and r.get("followUp") == today.isoformat() and n != int(r.get("remind", 7) or 0))
+        try:
+            mine = claimed(uid, r, "push")
+        except Exception as e:
+            print(f"[daily] couldn't check sent records: {e!r}")
+            summary["push_failed"] += 1
+            continue
+        if not mine:
+            summary["already_sent"] += 1
+            continue
+        delivered = 0
         payload = {"title": title, "body": body,
                    "tag": f"rr-{r.get('id', '')}-{today.isoformat()}", "url": "/#/dashboard", "id": str(r.get("id", ""))[:80] or None}
         for sub in subs:
@@ -258,10 +298,13 @@ def run(env=None, dry=False, today=None, load_fn=None, lookup_fn=None, send_fn=N
             try:
                 push({"endpoint": sub["endpoint"], "keys": sub["keys"]}, payload, vapid, env.get("VAPID_SUBJECT", "").strip() or "https://renewduck.vercel.app")
                 summary["push_sent"] += 1
+                delivered += 1
             except Exception as e:
                 code = getattr(getattr(e, "response", None), "status_code", None)
                 print(f"[daily] push failed for user {uid[:6]}…: {code or type(e).__name__}")  # 404/410 = device unsubscribed
                 summary["push_failed"] += 1
+        if not dry and not delivered:
+            unclaim(uid, r, "push")  # nothing reached any device → allow a retry
     print(f"[daily] {summary}")
     return 200, summary
 

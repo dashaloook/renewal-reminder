@@ -279,8 +279,8 @@ function App() {
     if (!isCloud(state.account) || r.channel !== 'email' || r.status === 'cancelled' || !window.RRApi) return;
     const today = R.iso(R.today()); const n = R.daysUntil(r.date);
     if (n < 0 || n > Number(r.remind) || r.emailedOn === today) return;
-    window.RRApi.sendReminder(r)
-      .then((d) => { update((s) => ({ reminders: s.reminders.map((x) => (x.id === r.id ? { ...x, emailedOn: today } : x)) })); showToast('Reminder email sent', `We emailed ${d.to} about ${r.name}. Check Spam if it’s not in your inbox.`, null); })
+    window.RRApi.sendReminder(r, { due: true })
+      .then((d) => { update((s) => ({ reminders: s.reminders.map((x) => (x.id === r.id ? { ...x, emailedOn: today } : x)) })); if (!d.already) showToast('Reminder email sent', `We emailed ${d.to} about ${r.name}. Check Spam if it’s not in your inbox.`, null); })
       .catch((e) => showToast('Couldn’t send the reminder email', e.message, null));
   };
   // Turn on real browser notifications for this device (asks the browser for permission).

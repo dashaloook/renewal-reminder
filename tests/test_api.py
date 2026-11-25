@@ -182,5 +182,115 @@ class DailyJobTests(unittest.TestCase):
         self.assertEqual(d.decode(v), {"a": 7, "b": ["x"]})
 
 
+class FakeLedger:
+    """In-memory stand-in for the Firestore `sent` records (create-if-absent is atomic, like Firestore)."""
+    def __init__(self, broken=False):
+        self.keys, self.broken = set(), broken
+
+    def claim(self, key, info):
+        if self.broken:
+            raise OSError("database unavailable")
+        if key in self.keys:
+            return False
+        self.keys.add(key)
+        return True
+
+    def release(self, key):
+        self.keys.discard(key)
+
+    def exists(self, key):
+        return key in self.keys
+
+
+class NoDuplicateTests(unittest.TestCase):
+    T = dt.date(2026, 11, 24)
+    ENV = {**BREVO, "FIREBASE_SERVICE_ACCOUNT": "{}", "VAPID_PRIVATE_KEY": "k"}
+
+    def job(self, ledger, users, send=None, push=None, **kw):
+        sent, pushed = [], []
+        status, out = d.run(env=self.ENV, today=self.T, load_fn=lambda: users, lookup_fn=lambda ids: {"a": "a@x"},
+                            send_fn=send or (lambda *a: sent.append(a[2])), push_fn=push or (lambda sub, *a: pushed.append(sub["endpoint"])),
+                            ledger=ledger, **kw)
+        return out, sent, pushed
+
+    def test_running_the_job_twice_sends_once(self):
+        ledger, users = FakeLedger(), [("a", [R(id="e")], [])]
+        first, sent1, _ = self.job(ledger, users)
+        second, sent2, _ = self.job(ledger, users)
+        self.assertEqual((first["sent"], len(sent1)), (1, 1))
+        self.assertEqual((second["sent"], second["already_sent"], sent2), (0, 1, []))
+
+    def test_failed_send_is_retried_next_run(self):
+        ledger, users = FakeLedger(), [("a", [R(id="e")], [])]
+        def boom(*a):
+            raise OSError("smtp down")
+        out, _, _ = self.job(ledger, users, send=boom)
+        self.assertEqual(out["failed"], 1)
+        out, sent, _ = self.job(ledger, users)
+        self.assertEqual((out["sent"], sent), (1, ["a@x"]))
+
+    def test_push_once_and_retry_when_no_device_got_it(self):
+        sub = {"endpoint": "https://push/1", "keys": {"p256dh": "a", "auth": "b"}}
+        ledger, users = FakeLedger(), [("a", [R(id="p", channel="browser")], [sub])]
+        def fail(*a):
+            raise OSError("gone")
+        out, _, _ = self.job(ledger, users, push=fail)
+        self.assertEqual(out["push_failed"], 1)
+        out, _, pushed = self.job(ledger, users)
+        self.assertEqual(pushed, ["https://push/1"])
+        out, _, pushed = self.job(ledger, users)
+        self.assertEqual((pushed, out["already_sent"]), ([], 1))
+
+    def test_dry_run_reports_already_sent_and_claims_nothing(self):
+        ledger, users = FakeLedger(), [("a", [R(id="e")], [])]
+        out, _, _ = self.job(ledger, users, dry=True)
+        self.assertEqual((out.get("would_send"), ledger.keys), (1, set()))
+        self.job(ledger, users)
+        out, _, _ = self.job(ledger, users, dry=True)
+        self.assertEqual((out["already_sent"], out.get("would_send")), (1, None))
+
+    def test_records_unavailable_means_no_send(self):
+        out, sent, _ = self.job(FakeLedger(broken=True), [("a", [R(id="e")], [])])
+        self.assertEqual((out["failed"], sent), (1, []))
+
+
+class SaveEmailNoDuplicateTests(unittest.TestCase):
+    DUE = json.dumps({"due": True, "reminder": {"id": "netflix", "name": "Netflix", "date": "2026-11-30", "amount": 1, "cycle": "monthly", "daysLeft": 0}}).encode()
+
+    def call(self, ledger, body=None, sender=None):
+        s._hits.clear()
+        sent = []
+        status, out = s.process("POST", {"Authorization": "Bearer t"}, body or self.DUE, "1", env=BREVO,
+                                sender_fn=sender or (lambda *a: sent.append(a[2]) or {"id": "m"}), lookup_fn=lambda k, t: USER, ledger=ledger)
+        return status, out, sent
+
+    def test_saving_twice_emails_once(self):
+        ledger = FakeLedger()
+        self.assertEqual(self.call(ledger)[2], ["user@example.com"])
+        status, out, sent = self.call(ledger)
+        self.assertEqual((status, out.get("already"), sent), (200, True, []))
+
+    def test_job_and_save_share_the_same_record(self):
+        ledger = FakeLedger()
+        ledger.claim(s.sent_key("u1", "netflix", s.today_kyiv().isoformat(), "email"), {})
+        self.assertEqual(self.call(ledger)[1].get("already"), True)
+
+    def test_failed_send_releases_the_record(self):
+        ledger = FakeLedger()
+        def boom(*a):
+            raise OSError("down")
+        self.assertEqual(self.call(ledger, sender=boom)[0], 502)
+        self.assertEqual(ledger.keys, set())
+
+    def test_test_emails_are_not_limited(self):
+        ledger, test = FakeLedger(), json.dumps({"reminder": {"id": "netflix", "name": "Netflix", "date": "2026-11-30"}}).encode()
+        self.assertEqual(len(self.call(ledger, test)[2]) + len(self.call(ledger, test)[2]), 2)
+        self.assertEqual(ledger.keys, set())
+
+    def test_due_must_be_boolean(self):
+        bad = json.dumps({"due": "yes", "reminder": {"name": "N", "date": "2026-11-30"}}).encode()
+        self.assertEqual(self.call(FakeLedger(), bad)[0], 400)
+
+
 if __name__ == "__main__":
     unittest.main()

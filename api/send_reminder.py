@@ -25,6 +25,7 @@ import os
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 LOOKUP_URL = "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key="
@@ -55,6 +56,8 @@ def _validate(data):
     """Return (clean_reminder, None) or (None, error_message)."""
     if not isinstance(data, dict):
         return None, "Send a JSON object."
+    if "due" in data and not isinstance(data["due"], bool):
+        return None, "due must be true or false."
     r = data.get("reminder")
     if not isinstance(r, dict):
         return None, "Missing reminder."
@@ -207,6 +210,73 @@ def friendly_send_error(e):
     return "Couldn’t reach the email service. Try again.", None
 
 
+# ---------- "Already sent" records (no duplicates) ----------
+# Before a real reminder email or push goes out, the server creates sent/{uid}__{reminderId}__{date}__{kind}
+# in one atomic step ("create only if it doesn't exist"). If the record already exists, someone already
+# sent it today, so we skip. If sending fails, the record is removed so a later run can retry.
+# Only the server (service account) can touch `sent` — the database rules close it to browsers.
+
+def sent_key(uid, reminder_id, day, kind):
+    return f"{uid}__{reminder_id}__{day}__{kind}"[:1400]
+
+
+def service_token(sa, scopes=("https://www.googleapis.com/auth/datastore",)):
+    from google.oauth2 import service_account
+    import google.auth.transport.requests
+    creds = service_account.Credentials.from_service_account_info(sa, scopes=list(scopes))
+    creds.refresh(google.auth.transport.requests.Request())
+    return creds.token
+
+
+class SentLedger:
+    def __init__(self, project_id, token):
+        self.base = f"https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents/sent"
+        self.token = token
+
+    def _req(self, url, method="GET", body=None):
+        req = urllib.request.Request(url, method=method, data=json.dumps(body).encode() if body is not None else None,
+                                     headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=15) as res:
+            return res.status
+
+    def claim(self, key, info):
+        """True if this call created the record (we may send); False if it already existed (skip)."""
+        import datetime as _dt
+        now = _dt.datetime.now(_dt.timezone.utc)
+        ts = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+        fields = {k: {"stringValue": str(v)} for k, v in info.items()}
+        fields["at"] = {"timestampValue": ts(now)}
+        fields["expireAt"] = {"timestampValue": ts(now + _dt.timedelta(days=45))}  # for an optional Firestore TTL policy
+        try:
+            self._req(f"{self.base}?documentId={urllib.parse.quote(key, safe='')}", "POST", {"fields": fields})
+            return True
+        except urllib.error.HTTPError as e:
+            if e.code == 409:  # ALREADY_EXISTS
+                return False
+            raise
+
+    def release(self, key):
+        try:
+            self._req(f"{self.base}/{urllib.parse.quote(key, safe='')}", "DELETE")
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+
+    def exists(self, key):
+        try:
+            return self._req(f"{self.base}/{urllib.parse.quote(key, safe='')}") == 200
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return False
+            raise
+
+
+def today_kyiv():
+    from zoneinfo import ZoneInfo
+    import datetime as _dt
+    return _dt.datetime.now(ZoneInfo("Europe/Kyiv")).date()
+
+
 def _lookup(firebase_key, id_token):
     """Ask Google who this sign-in token belongs to. Returns the user dict or None."""
     payload = json.dumps({"idToken": id_token}).encode()
@@ -220,7 +290,7 @@ def _lookup(firebase_key, id_token):
     return users[0] if users else None
 
 
-def process(method, headers, raw_body, ip, env=None, sender_fn=None, lookup_fn=None):
+def process(method, headers, raw_body, ip, env=None, sender_fn=None, lookup_fn=None, ledger=None):
     """Pure request logic: returns (status, json_dict). Used by Vercel and dev_server.py."""
     env = os.environ if env is None else env
     lookup = lookup_fn or _lookup
@@ -269,10 +339,32 @@ def process(method, headers, raw_body, ip, env=None, sender_fn=None, lookup_fn=N
 
     send, secret, sender, _ = channel
     send = sender_fn or send
+    # A real reminder (saved on/after its reminder day), not a test: send it at most once per day,
+    # shared with the daily job through the "already sent" records.
+    key = None
+    if data.get("due") is True and reminder.get("id"):
+        try:
+            if ledger is None:
+                raw = env.get("FIREBASE_SERVICE_ACCOUNT", "").strip()
+                if raw:
+                    sa = json.loads(raw)
+                    ledger = SentLedger(sa["project_id"], service_token(sa))
+            if ledger:
+                key = sent_key(user.get("localId") or "", reminder["id"], today_kyiv().isoformat(), "email")
+                if not ledger.claim(key, {"uid": user.get("localId") or "", "reminderId": reminder["id"], "date": today_kyiv().isoformat(), "kind": "email", "by": "save"}):
+                    return 200, {"ok": True, "already": True, "to": to}
+        except Exception as e:  # records unavailable: still send (better a rare duplicate than a missed reminder)
+            print(f"[send_reminder] sent-records check failed: {e!r}")
+            key = None
     subject, text, body = build_email(reminder)
     try:
         result = send(secret, sender, to, subject, text, body) or {}
     except Exception as e:
+        if key and ledger:
+            try:
+                ledger.release(key)
+            except Exception:
+                pass
         msg, code = friendly_send_error(e)
         return 502, {"error": msg, **({"code": code} if code else {})}
     return 200, {"ok": True, "id": result.get("id"), "to": to}
