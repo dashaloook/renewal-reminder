@@ -51,6 +51,7 @@ Everything a developer needs to run, deploy, verify and hand over this app — a
 |---|---|
 | `users/{uid}` | `stats`, `onboarded`, `notif`, `bannerDismissed`, `push` (≤ 5 devices), `updatedAt`. Old accounts may still have `reminders` (list) until their next login moves it. |
 | `users/{uid}/reminders/{id}` | One reminder: `id, name, category, amount, cycle, date, remind, channel, link, note, status, reason, followUp, tone, history, emailedOn, updatedAt`. |
+| `sent/{uid}__{reminderId}__{date}__{kind}` | **Server-only** "already sent" records (`kind` = `email` or `push`). Created atomically *before* sending (create-if-absent), removed if sending fails. Stops duplicates from a second/overlapping job run or the email sent on save. Has `expireAt` (+45 days) — add a Firestore **TTL policy** on `sent.expireAt` (Firestore → TTL) to clean them up automatically. Closed to browsers by the rules. |
 
 Deleting an account deletes every `reminders/*` record first, then the profile, then the login. The daily job reads all reminder records with one paged collection-group query and still includes old lists that haven't been moved yet.
 
@@ -146,6 +147,7 @@ curl -s -w '\n' -H "Authorization: Bearer $CRON_SECRET" 'https://renewduck.verce
 In the browser: demo works · Google sign-in shows `renewduck.vercel.app` · a reminder saves and reloads from the cloud · **Send test email** arrives · **Send test notification** shows.
 
 Daily-job switches (need `CRON_SECRET`): `?dry=1` (report only) · `?only=email` / `?only=push` (run one kind).
+Running the job twice is safe: reminders already sent today are counted as `already_sent` and skipped. A dry run reports them without claiming anything.
 
 ---
 
@@ -155,7 +157,8 @@ Daily-job switches (need `CRON_SECRET`): `?dry=1` (report only) · `?only=email`
 - **Firebase web config is public by design.** Protection = Firestore rules (each user can read/write/delete only `users/{own uid}` and `users/{own uid}/reminders/*`; every reminder record checked for owner, allowed fields and sizes) + authorized domains.
 - **No lost edits between devices:** one record per reminder; each device writes only what it changed (tested: an offline device editing one reminder no longer deletes a reminder added on another device).
 - **Email API** sends only to the caller's own confirmed address (ID token verified with Google), validates and HTML-escapes input, rate-limits 5 per 10 min per user, never returns provider errors to the browser.
-- **Daily job** runs only with `CRON_SECRET`; uses a service account read-only; never takes recipients from the database.
+- **Daily job** runs only with `CRON_SECRET`; reads user data with a service account (it writes only its own `sent` records); never takes recipients from the database.
+- **No duplicate reminders:** an atomic `sent` record per reminder/day/kind is created before sending; a second or overlapping run, or the email-on-save, sees it and skips. If the records can't be checked, the job sends nothing and reports `failed`.
 - **Account deletion** re-authenticates (Google popup or password), deletes the Firestore doc, then the login.
 - **Logs** never contain email addresses or secrets.
 
