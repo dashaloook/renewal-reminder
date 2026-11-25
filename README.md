@@ -102,7 +102,7 @@ Without `.env.local` everything works except email: the button explains that ema
 
 ## Deploy (Vercel)
 
-Import the repository in Vercel (**Add New → Project**), no build settings needed. Every push to `main` redeploys.
+Import the repository in Vercel (**Add New → Project**), no build settings needed. Merging into `main` (protected: pull request + passing checks) deploys the live site; branch `dev` deploys a test copy that uses the separate test Firebase project. Details: [DEPLOY.md §6](DEPLOY.md#6-release-process).
 
 In **Settings → Environment Variables** add `BREVO_API_KEY` and `BREVO_SENDER` as **Secret** (optionally `ALLOWED_ORIGIN` = the site URL), then redeploy.
 

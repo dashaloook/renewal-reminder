@@ -59,9 +59,10 @@ Deleting an account deletes every `reminders/*` record first, then the profile, 
 
 | Service | Used for | Plan | Notes |
 |---|---|---|---|
-| **GitHub** `dashaloook/renewal-reminder` | Code; every push to `main` deploys | Free | Public repo — never commit secrets. |
-| **Vercel** project `renewal-reminder` | Hosting, functions, cron, env vars | Hobby (free) | Domains: `renewduck.vercel.app` (prod), old one redirects. |
-| **Firebase** project `renewal-reminder-33e59` | Auth (Google + Email/Password), Firestore (`europe-central2`, Warsaw) | Spark (free) | Authorized domains: `localhost`, `renewduck.vercel.app`, `renewal-reminder-one.vercel.app`. |
+| **GitHub** `dashaloook/renewal-reminder` | Code; checks (GitHub Actions); `main` = live, `dev` = test | Free | Public repo — never commit secrets. `main` is protected (§6). |
+| **Vercel** project `renewal-reminder` | Hosting, functions, cron, env vars | Hobby (free) | Live: `renewduck.vercel.app` (old address also works). Test: `renewal-reminder-git-dev-dashaloook.vercel.app` (branch `dev`). |
+| **Firebase** project `renewal-reminder-33e59` (**live**) | Auth (Google + Email/Password), Firestore (`europe-central2`, Warsaw) | Spark (free) | Authorized domains: `localhost`, `renewduck.vercel.app`, `renewal-reminder-one.vercel.app`. |
+| **Firebase** project `renewal-reminder-test` (**test**) | Same setup, test data only | Spark (free) | Used on `localhost` and every Vercel preview. Authorized domains: `localhost`, the `dev` test address. Same `firestore.rules`. |
 | **Google Cloud** (same project) | OAuth client for Google sign-in | — | Redirect URIs include `https://renewduck.vercel.app/__/auth/handler`. |
 | **Brevo** | Transactional email (API) | Free (300 emails/day) | Verified sender (a Gmail address). API key "Renewal Reminder 2", restricted to Transactional email. |
 
@@ -86,6 +87,15 @@ All are type **Secret** (write-only). Locally, the same names go in `.env.local`
 | `APP_URL` | optional | Base URL used in email links. Default `https://renewduck.vercel.app`. | Domain change. |
 | `FIREBASE_API_KEY` | optional | Overrides the public web key used to verify sign-in tokens. | — |
 
+The variables above are set for **Production** only. **Preview** (test copies, e.g. branch `dev`) has its own, non-secret settings:
+
+| Name (Preview) | Value |
+|---|---|
+| `FIREBASE_API_KEY` | the test project's public web key (same as `TEST` in `firebase-config.js`) |
+| `APP_URL` | `https://renewal-reminder-git-dev-dashaloook.vercel.app` |
+
+So on a test copy sign-in works against the test project, but **email and push are off** (no Brevo/VAPID keys) and the daily job never runs (Vercel Cron runs on Production only). To test email there, add `BREVO_API_KEY` + `BREVO_SENDER` for Preview; to test the "already sent" records too, add a `FIREBASE_SERVICE_ACCOUNT` generated in the **test** project — never the live one.
+
 **Changing a variable does nothing until the next deployment** — redeploy (push a commit, or Vercel → Deployments → Redeploy).
 
 ---
@@ -98,7 +108,8 @@ python3 dev_server.py 5174        # http://localhost:5174
 python3 -m unittest discover -s tests -v
 ```
 - No build step, no Node required. Python 3.9+.
-- `localhost` is an authorized Firebase domain, so Google/email sign-in work locally.
+- **Locally the app uses the test Firebase project** (`firebase-config.js` picks the live project only on the live addresses), so you can't touch real users' data. Create test accounts freely.
+- Database rules tests need Node 20 + Java 21: `cd tests/rules && npm install && npm test` (they also run in CI on every pull request).
 - The daily job needs `pip install -r requirements.txt` only when actually sending push locally.
 
 ---
@@ -124,15 +135,24 @@ python3 -m unittest discover -s tests -v
 
 ## 6. Release process
 
-1. Make the change; run `python3 -m unittest discover -s tests -v`.
+| | Branch | Address | Firebase project |
+|---|---|---|---|
+| Local | any | `localhost` | test |
+| **Test** | `dev` (or any branch → its own preview URL) | `renewal-reminder-git-dev-dashaloook.vercel.app` | test |
+| **Live** | `main` | `renewduck.vercel.app` | live |
+
+`main` is **protected**: changes only arrive through a pull request, and the three checks must pass first — *Server tests (Python)*, *Web app syntax (JS)*, *Database rules (Firebase emulator)* (`.github/workflows/ci.yml`). No direct pushes or force-pushes, admins included.
+
+1. Work on `dev` (or a feature branch). Run `python3 -m unittest discover -s tests -v`.
 2. **Bump the cache-busting version** in `index.html` (all `?v=` values), otherwise browsers keep old JS/CSS:
    ```bash
    V=$(date +%Y%m%d%H%M) && sed -i '' -E "s#\?v=[0-9]+#?v=$V#g" index.html
    ```
-3. If `firestore.rules` changed → publish them in the Firebase console **before** deploying code that depends on them.
-4. Commit & push to `main` → Vercel builds automatically (~30 s). Check the commit status: `gh api repos/<owner>/renewal-reminder/commits/<sha>/status --jq .state`.
-5. Run the smoke test (§7).
-6. **Rollback:** Vercel → Deployments → pick the previous good deployment → *Promote to Production* (instant). Then revert the commit in git.
+3. Push → Vercel builds the test copy (~30 s) → try it on the test address (Vercel may ask you to log in: previews are private).
+4. If `firestore.rules` changed → publish them to the **test** project first, then (before merging) to the **live** project.
+5. Open a pull request into `main` (`gh pr create --base main --head dev`). Wait for the three checks → merge → Vercel deploys live.
+6. Run the smoke test (§7).
+7. **Rollback:** Vercel → Deployments → pick the previous good deployment → *Promote to Production* (instant). Then revert the commit with a pull request.
 
 ---
 
@@ -175,11 +195,11 @@ Ordered by importance. ✅ = done, ⚠️ = needed for real users.
 - Keep user-reported spam under **0.3%** (Google Postmaster Tools).
 
 ### Firebase / Google Cloud
-- ⚠️ **Separate dev and prod projects** (Firebase launch checklist). Today one project serves both.
+- ✅ **Separate test and live projects** (Firebase launch checklist): `renewal-reminder-test` for localhost and previews, `renewal-reminder-33e59` for the live site only.
 - ⚠️ **App Check** (reCAPTCHA Enterprise for web) with enforcement for Firestore and Auth.
 - ⚠️ **Restrict the browser API key** in Google Cloud → Credentials (HTTP referrers = your domains; APIs = Identity Toolkit, Firestore, Token Service).
 - ⚠️ **Backups:** scheduled backups and point-in-time recovery require the **Blaze** plan (daily/weekly, up to 14 weeks; PITR 7 days). Test a restore.
-- ⚠️ **Rules tests** with the Firebase Emulator Suite in CI.
+- ✅ **Rules tests** with the Firebase emulator in CI (`tests/rules/`).
 - Email enumeration protection: keep enabled (Auth → Settings).
 
 ### Vercel / platform
