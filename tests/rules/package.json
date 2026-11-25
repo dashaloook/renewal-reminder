@@ -4,7 +4,7 @@
   "description": "Firestore security rules tests — run in CI against the Firebase emulator (see DEPLOY.md).",
   "type": "module",
   "scripts": {
-    "test": "firebase emulators:exec --only firestore --project demo-renewal-reminder \"node --test rules.test.mjs\""
+    "test": "firebase emulators:exec --config ../../firebase.json --only firestore --project demo-renewal-reminder \"node --test rules.test.mjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "3.0.4",
