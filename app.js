@@ -426,7 +426,7 @@ function Onboarding({ ctx }) {
   useEffect(() => { headRef.current && headRef.current.focus(); }, [step]);
   const bar = html`<div class="onb-prog" role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow=${step} aria-label=${`Step ${step} of 3`}><span class="small c3">${step} / 3</span><span class="segs" aria-hidden="true">${[1, 2, 3].map((i) => html`<i class=${i <= step ? 'on' : ''}></i>`)}</span></div>`;
   const timeline = [['Today', 'Netflix renews in 7 days. We let you know.', 'bell', 'brand'], ['Tomorrow', 'Not now? Postpone with a reason.', 'hourglass', 'amber'], ['In 5 days', 'We remind you, with your note.', 'reset', 'brand'], ['In 7 days · charge date', 'You’ve decided. No surprise.', 'circle-check', 'green']];
-  return html`<div class="onb">
+  return html`<main class="onb" id="main" tabindex="-1">
     <div class="onb-top"><div class="brand" style=${{ padding: 0 }}><span class="brand-mark"><${Icon} n="bell" c="s" /></span>Renewal Reminder<${Demo} /></div><${Btn} v="ghost" sm onClick=${leave}>${step === 3 ? 'I’ll add later' : 'Skip'}<//></div>
     <section class="onb-card wide" aria-labelledby="onb-h">
       ${bar}
@@ -450,7 +450,7 @@ function Onboarding({ ctx }) {
               <${Btn} icon="hourglass" full disabled=${posted} onClick=${() => setPosted(true)}>${posted ? 'Postponed' : 'Postpone'}<//>
             </div>
             <div class="small c3 row" style=${{ justifyContent: 'center' }}><${Icon} n="chevron-down" c="s" />Then it waits here</div>
-            <div class="card pad20 col gap12" aria-live="polite" style=${{ border: posted ? '2px solid var(--brand-subtle)' : '1px dashed var(--border)', opacity: posted ? 1 : .6, background: posted ? 'var(--surface)' : 'transparent' }}>
+            <div class="card pad20 col gap12" aria-live="polite" style=${{ border: posted ? '2px solid var(--brand-subtle)' : '1px dashed var(--border)', background: posted ? 'var(--surface)' : 'transparent' }}>
               <div class="row cb"><${Icon} n="hourglass" c="s" /><b style=${{ color: 'var(--text)' }}>Unfinished decisions</b></div>
               ${posted ? html`<div class="row gap12"><span class="logo sm tone-rose">N</span><div class="col"><b>Netflix · €15.49</b><span class="small c3">${reason} · reminder tomorrow, 9:00</span></div></div>` : html`<span class="small c3">Press “Postpone” to see Netflix land here.</span>`}
             </div></div>`}
@@ -469,7 +469,7 @@ function Onboarding({ ctx }) {
         ${step < 3 ? html`<${Btn} iconR="arrow-right" onClick=${() => setStep(step + 1)}>Next<//>` : html`<${Btn} iconR="arrow-right" loading=${busy} onClick=${finish}>${sel.length ? `Add ${sel.length} service${sel.length > 1 ? 's' : ''}` : 'Continue without adding'}<//>`}
       </div>
     </section>
-  </div>`;
+  </main>`;
 }
 
 // ---------- Login ----------
@@ -525,7 +525,7 @@ function Login({ ctx, mode = 'login' }) {
   const field = (id, label, input, extra) => html`<div class="field">${extra || html`<label for=${id}>${label}</label>`}${input}
     ${err[id] && html`<span class="msg err" id=${id + '-err'}><${Icon} n="info" c="xs" />${err[id]}</span>`}</div>`;
   const inp = (id, type, value, set, ac, ph) => html`<input id=${id} class=${'input' + (err[id] ? ' err' : '')} type=${type} autocomplete=${ac} value=${value} onInput=${(e) => set(e.target.value)} aria-invalid=${!!err[id]} aria-describedby=${err[id] ? id + '-err' : undefined} placeholder=${ph} />`;
-  return html`<div class="login">
+  return html`<main class="login" id="main" tabindex="-1">
     <div class="login-form">
       <div class="row" style=${{ justifyContent: 'center', flexWrap: 'wrap', gap: 12 }}><div class="brand" style=${{ padding: 0 }}><span class="brand-mark"><${Icon} n="bell" c="s" /></span>Renewal Reminder${mode === 'login' && html`<${Demo} />`}</div></div>
       <form onSubmit=${submit} noValidate aria-labelledby="login-h">
@@ -562,7 +562,7 @@ function Login({ ctx, mode = 'login' }) {
         <p class="c2" style=${{ margin: 0 }}>7 of 8 renewals were decided before the charge date. Every “keep” and “cancel” was a choice, not an accident.</p>
       </div>
     </aside>
-  </div>`;
+  </main>`;
 }
 
 // ---------- Dashboard ----------
@@ -652,7 +652,7 @@ function Drawer({ r, ctx, onClose }) {
   };
   const resend = () => ctx.auth.resendVerification().then(() => setMail({ s: 'sent', msg: `Confirmation link sent to ${R.USER.email}. Open it, then send the test email again.` })).catch((e) => setMail({ s: 'error', msg: ctx.auth.friendly(e) }));
   return html`<div class="scrim" onClick=${onClose}></div>
-  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-h" ref=${ref}>
+  <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="dr-h" ref=${ref}>
     <div class="row gap12" style=${{ padding: 24, borderBottom: '1px solid var(--muted)' }}><${Logo} r=${r} size="lg" /><div class="grow"><h2 class="h2" id="dr-h">${r.name}</h2><span class="c2">${cat(r.category).one} · ${cyc(r.cycle).label}</span></div><button class="icon-btn" aria-label="Close details" onClick=${onClose} data-autofocus><${Icon} n="x" c="s" /></button></div>
     <div class="drawer-body">
       <div class="row wrap"><${UrgBadge} r=${r} /><${StatusBadge} r=${r} /></div>
@@ -686,7 +686,7 @@ function Drawer({ r, ctx, onClose }) {
       <${Btn} v="secondary" sm icon="pencil" onClick=${() => { onClose(); go('edit/' + r.id); }}>Edit<//>
       <${Btn} v="ghost" sm icon="trash" onClick=${() => ctx.confirm({ title: `Delete the ${r.name} reminder?`, body: `This removes the reminder, its note and history from Renewal Reminder. It doesn’t cancel your ${r.name} subscription.`, tip: 'Stopped paying? Use “I cancelled it” instead — it keeps the history.', ok: 'Delete reminder', danger: true, onOk: () => ctx.remove(r.id) })}>Delete<//>
     </div>
-  </aside>`;
+  </div>`;
 }
 
 
