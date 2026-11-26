@@ -24,7 +24,7 @@ def start_demo(page: Page, base_url):
 def pick_date(page: Page, field_id, day_iso):
     page.locator(f"#{field_id}").click()
     cell = page.locator(f'[data-d="{day_iso}"]')
-    for _ in range(3):  # the date may be in the next month
+    for _ in range(14):  # the date may be in a later month
         if cell.count() and cell.first.is_visible():
             break
         page.get_by_role("button", name="Next month").click()
@@ -195,3 +195,34 @@ def test_phone_width_has_no_sideways_scroll(page: Page, base_url, errors):
     check("list view")
     search = page.locator("#ls").bounding_box()
     assert search["height"] < 60, "search box should not stretch into a tall empty block"
+
+
+def test_phone_profile_opens_as_bottom_sheet(page: Page, base_url, errors):
+    page.set_viewport_size({"width": 390, "height": 844})
+    start_demo(page, base_url)
+    page.get_by_role("button", name="Profile").click()
+    sheet = page.get_by_role("dialog", name="Alex Koval")
+    expect(sheet).to_be_visible()
+    expect(sheet.get_by_role("button", name="Log out")).to_be_visible()
+    page.wait_for_timeout(400)  # slide-up animation
+    box = sheet.bounding_box()
+    assert abs(box["y"] + box["height"] - 844) <= 1, "sheet should sit on the bottom edge"
+    sheet.get_by_role("button", name="Cancel").click()
+    expect(sheet).to_be_hidden()
+
+
+def test_note_warns_when_pasted_text_lost_its_letters(page: Page, base_url, errors):
+    start_demo(page, base_url)
+    page.goto(base_url + "/#/new")
+    page.locator(".chip", has_text="Enter manually").click()
+    page.locator("#f-note").fill("Обов'язково перевірити ціну")
+    expect(page.get_by_text(re.compile("came through as"))).to_have_count(0)
+    page.locator("#f-note").fill("???'?????? ????????")
+    expect(page.get_by_text(re.compile("came through as"))).to_be_visible()
+
+
+def test_next_years_dates_show_the_year(page: Page, base_url, errors):
+    start_demo(page, base_url)
+    days = (dt.date(dt.date.today().year + 1, 1, 15) - dt.date.today()).days  # mid-January next year
+    add_reminder(page, "QA Next Year", days=days).get_by_role("button", name="Go to my list").click()
+    expect(open_details(page, "QA Next Year")).to_contain_text(f"15 January {dt.date.today().year + 1}")

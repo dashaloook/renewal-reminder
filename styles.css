@@ -446,3 +446,45 @@ svg.icon{max-width:none}
 /* Skip link: hidden until focused with the keyboard (Tab), then shown at the top left. */
 .skip:focus{position:fixed;left:12px;top:12px;width:auto;height:auto;clip:auto;margin:0;padding:10px 14px;background:var(--surface);color:var(--brand);border-radius:8px;box-shadow:var(--shadow-m);z-index:100;outline:3px solid var(--brand)}
 .login:focus,.onb:focus,.main:focus{outline:none}
+
+/* ---- Mobile polish (26 Nov, from phone screenshots) ---- */
+@media (max-width:860px){
+  /* Messages (toasts) at the top on phones: they no longer cover dialogs, buttons or the menu bar */
+  .toast{top:calc(env(safe-area-inset-top, 0px) + 12px);bottom:auto;animation:toast-down .2s ease}
+  .toast .bar{top:auto}
+
+  /* Dashboard: "1 waiting" under the title, "View all" stays on the right */
+  .ud-head{display:grid;grid-template-columns:1fr auto;column-gap:12px;row-gap:6px;align-items:center}
+  .ud-head h2{grid-column:1;grid-row:1}
+  .ud-head .ud-all{grid-column:2;grid-row:1;white-space:nowrap}
+  .ud-head .ud-count{grid-column:1;grid-row:2;justify-self:start}
+  .ud-head .grow{display:none}
+
+  /* Filters: search + view switch on one line, then status tabs, Sort, categories */
+  .filters-row>.grow{flex:1 1 0;order:1}
+  .filters-card .view-seg{order:2;margin-left:0}
+  .filters-row>.seg.scroll-x{order:3;flex:1 1 100%}
+  .filters-row>label{order:4}
+
+  /* Compact, phone-style tabs and chips (scroll sideways instead of stretching) */
+  .filters-card .seg.scroll-x{background:none;padding:0 12px;gap:8px}
+  .filters-card .seg.scroll-x button{flex:none;min-height:36px;padding:6px 14px;border-radius:999px;background:var(--subtle);font-size:14px}
+  .filters-card .seg.scroll-x button[aria-checked=true]{background:var(--inverse-bg);color:#fff;box-shadow:none}
+  .filters-card .chip{min-height:36px;padding:6px 12px;font-size:14px}
+  .filters-card .view-seg button{min-height:36px;padding:4px 12px}
+  .filters-card .input{height:40px!important}
+
+  /* Profile bottom sheet */
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--surface);border-radius:20px 20px 0 0;box-shadow:var(--shadow-l);padding:8px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);display:flex;flex-direction:column;gap:12px;animation:sheet-up .22s ease}
+  .sheet-grip{width:40px;height:4px;border-radius:2px;background:var(--muted);align-self:center;margin:4px 0 4px}
+  .sheet-head{padding:4px 4px 12px;border-bottom:1px solid var(--muted)}
+  .sheet-head .avatar{width:40px;height:40px;flex:none}
+  .sheet-actions{gap:4px}
+  .sheet-btn{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:0 12px;border:0;background:none;border-radius:12px;font:inherit;font-size:16px;color:var(--text);text-align:left}
+  .sheet-btn:active{background:var(--subtle)}
+  .sheet-btn.danger{color:var(--danger)}
+  .m-sheet .scrim{z-index:55}
+}
+@keyframes toast-down{from{transform:translateY(-16px);opacity:0}}
+@keyframes sheet-up{from{transform:translateY(100%)}}
+@media (prefers-reduced-motion:reduce){.toast,.sheet{animation:none}}

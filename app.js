@@ -16,7 +16,10 @@ const notifCopy = (r, followUp) => {
   return { title: `${name} renews ${when}`, body: `${ask} ${n <= 0 ? 'Decide before you’re charged.' : n === 1 ? 'Decide before tomorrow’s charge.' : 'Take a moment to decide.'}` };
 };
 const remindTxt = (n) => (n === 0 ? 'on the day' : `${n} ${n === 1 ? 'day' : 'days'} before`);
-const fmt = (s, opts = { day: 'numeric', month: 'long' }) => R.parse(s).toLocaleDateString('en-GB', opts);
+// Text where letters were replaced by “?” or “�” (copied from an app that lost them).
+const isPhone = () => { try { return matchMedia('(max-width: 860px)').matches; } catch (e) { return false; } };
+const garbled = (t) => /\?{3,}|\uFFFD/.test(t || '');
+const fmt = (s, opts) => { const d = R.parse(s); return d.toLocaleDateString('en-GB', opts || (d.getFullYear() === new Date().getFullYear() ? { day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long', year: 'numeric' })); };
 const rel = (n) => n < -1 ? `${-n} days ago` : n === -1 ? 'Yesterday' : n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : `In ${n} days`;
 const tone = (n) => n <= 2 ? 'red' : n <= 7 ? 'amber' : 'neutral';
 const cat = (id) => R.CATEGORIES.find((c) => c.id === id) || R.CATEGORIES[0];
@@ -376,7 +379,7 @@ function Shell({ ctx, page, children }) {
       <div class="side-head"><div class="brand"><span class="brand-mark"><${Icon} n="bell" c="s" /></span><span class="lbl col brand-txt"><span>Renewal Reminder</span><${Demo} /></span></div>
         <button class="side-toggle" aria-label=${collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title=${collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded=${!collapsed} aria-controls="side-nav" onClick=${toggleSide}><${Icon} n=${collapsed ? 'panel-open' : 'panel-close'} /></button></div>
       <nav class="nav" id="side-nav"><a href="#/dashboard" title=${collapsed ? 'Dashboard' : undefined} aria-current=${active === 'dashboard' ? 'page' : undefined}><${Icon} n="dashboard" /><span class="lbl">Dashboard</span></a><a href="#/reminders" title=${collapsed ? 'My reminders' : undefined} aria-current=${active === 'reminders' ? 'page' : undefined}><${Icon} n="list" /><span class="lbl">My reminders</span></a></nav>
-      <div class="profile">${menu && html`<${Menu} />`}<button class="profile-btn" aria-label=${collapsed ? `${R.USER.name}, account menu` : undefined} title=${collapsed ? R.USER.name : undefined} aria-haspopup="menu" aria-expanded=${menu} onClick=${() => setMenu(!menu)}><span class="avatar">${R.USER.photo ? html`<img src=${R.USER.photo} alt="" referrerpolicy="no-referrer" width="36" height="36" style=${{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />` : R.USER.initials}</span><span class="grow col lbl"><b style=${{ fontWeight: 600 }}>${R.USER.name}</b><span class="small c3">${R.USER.email}</span></span><span class="lbl row"><${Icon} n="chevron-down" c="s" /></span></button></div>
+      <div class="profile">${menu && !isPhone() && html`<${Menu} />`}<button class="profile-btn" aria-label=${collapsed ? `${R.USER.name}, account menu` : undefined} title=${collapsed ? R.USER.name : undefined} aria-haspopup="menu" aria-expanded=${menu} onClick=${() => setMenu(!menu)}><span class="avatar">${R.USER.photo ? html`<img src=${R.USER.photo} alt="" referrerpolicy="no-referrer" width="36" height="36" style=${{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />` : R.USER.initials}</span><span class="grow col lbl"><b style=${{ fontWeight: 600 }}>${R.USER.name}</b><span class="small c3">${R.USER.email}</span></span><span class="lbl row"><${Icon} n="chevron-down" c="s" /></span></button></div>
     </aside>
     <main class="main" id="main">
       <div class="topbar no-desk">
@@ -388,9 +391,26 @@ function Shell({ ctx, page, children }) {
     <nav class="bottom-bar" aria-label="Main navigation">
       <a href="#/dashboard" aria-current=${active === 'dashboard' && page !== 'new' ? 'page' : undefined}><${Icon} n="dashboard" />Dashboard</a>
       <a href="#/reminders" aria-current=${active === 'reminders' && page !== 'new' ? 'page' : undefined}><${Icon} n="list" />My reminders</a>
-      <div style=${{ position: 'relative' }}>${menu && html`<div style=${{ position: 'absolute', bottom: 64, right: 0, width: 220 }}><${Menu} /></div>`}<button aria-haspopup="menu" aria-expanded=${menu} onClick=${() => setMenu(!menu)}><${Icon} n="user" />Profile</button></div>
+      <button aria-haspopup="dialog" aria-expanded=${menu} aria-current=${menu ? 'page' : undefined} onClick=${() => setMenu(!menu)}><${Icon} n="user" />Profile</button>
     </nav>
+    ${menu && isPhone() && html`<${ProfileSheet} ctx=${ctx} onClose=${() => setMenu(false)} />`}
   </div>`;
+}
+
+// Phones: the profile menu opens as a bottom sheet (the sidebar menu is used on wider screens).
+function ProfileSheet({ ctx, onClose }) {
+  const ref = useOverlay(onClose);
+  return html`<div class="m-sheet"><div class="scrim" onClick=${onClose}></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ps-h" ref=${ref}>
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <div class="row gap12 sheet-head"><span class="avatar">${R.USER.photo ? html`<img src=${R.USER.photo} alt="" referrerpolicy="no-referrer" width="40" height="40" style=${{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />` : R.USER.initials}</span>
+      <div class="grow col"><b id="ps-h">${R.USER.name}</b><span class="small c2" style=${{ overflow: 'hidden', textOverflow: 'ellipsis' }}>${R.USER.email}</span></div></div>
+    <div class="col sheet-actions">
+      <button class="sheet-btn" data-autofocus onClick=${() => { onClose(); ctx.logout(); }}><${Icon} n="logout" c="s" />Log out</button>
+      ${R.CLOUD_ACCOUNT && ctx.openDeleteAccount && html`<button class="sheet-btn danger" onClick=${() => { onClose(); ctx.openDeleteAccount(); }}><${Icon} n="trash" c="s" />Delete account</button>`}
+    </div>
+    <${Btn} v="secondary" full onClick=${onClose}>Cancel<//>
+  </div></div>`;
 }
 
 // Empty state (Figma S2): mascot, message, primary action, popular templates that pre-fill the form
@@ -583,7 +603,7 @@ function Dashboard({ ctx }) {
     ${!state.notif && !state.notifBlocked && !state.bannerDismissed && html`<div class="banner" role="region" aria-label="Notifications are off"><span class="ic"><${Icon} n="bell-off" /></span><div class="grow"><b>Turn on notifications so you don’t miss a renewal</b><div class="c2">Browser notifications are off. We only notify you about reminders you set.</div></div>
       <${Btn} sm onClick=${ctx.enableNotifications}>Turn on<//><${Btn} v="ghost" sm onClick=${() => ctx.update(() => ({ bannerDismissed: true }))}>Dismiss<//></div>`}
     <section class="hero" aria-labelledby="ud-h">
-      <div class="row gap12"><h2 class="h2" id="ud-h">Unfinished decisions</h2>${unfinished.length > 0 && html`<span class="badge t-brand"><${Icon} n="hourglass" />${unfinished.length} waiting</span>`}<span class="grow"></span><a class="link" href="#/reminders?f=unfinished" onClick=${(e) => { e.preventDefault(); sessionStorage.setItem('rr-filter', 'unfinished'); go('reminders'); }}>View all</a></div>
+      <div class="row gap12 ud-head"><h2 class="h2" id="ud-h">Unfinished decisions</h2>${unfinished.length > 0 && html`<span class="badge t-brand ud-count"><${Icon} n="hourglass" />${unfinished.length} waiting</span>`}<span class="grow"></span><a class="link ud-all" href="#/reminders?f=unfinished" onClick=${(e) => { e.preventDefault(); sessionStorage.setItem('rr-filter', 'unfinished'); go('reminders'); }}>View all</a></div>
       ${unfinished.length ? html`<p class="c2" style=${{ margin: 0 }}>You postponed these. They’ll keep coming back until you decide — no pressure, just no surprises.</p>
         <div class="ucards">${unfinished.map((r) => html`<${UnfinishedCard} r=${r} ctx=${ctx} key=${r.id} />`)}</div>`
         : html`<div class="row gap16" style=${{ padding: 20, background: 'var(--success-subtle)', borderRadius: 12 }}><${Icon} n="circle-check" c="" style=${{ color: 'var(--success)' }} /><div><b>All decided.${next ? ` Next renewal ${R.daysUntil(next.date) === 0 ? 'today' : R.daysUntil(next.date) === 1 ? 'tomorrow' : `in ${R.daysUntil(next.date)} days`}.` : ''}</b><div class="c2">Nothing is waiting for you. We’ll bring the next one here when it’s due.</div></div></div>`}
@@ -948,7 +968,8 @@ function CreateForm({ ctx, editId }) {
       <div class="field"><span class="flabel" id="ch-l">Channel</span><div class="seg" role="radiogroup" aria-labelledby="ch-l">${[['browser', 'Browser'], ['email', 'Email']].map(([id, l]) => html`<button type="button" role="radio" aria-checked=${f.channel === id} onClick=${() => set('channel', id)}>${l}</button>`)}</div></div>
       <div class="field"><label for="f-link">Link to cancel or manage (optional)</label><input id="f-link" class=${'input' + (errors.link ? ' err' : '')} inputmode="url" autocomplete="off" placeholder="e.g. netflix.com/cancelplan" value=${f.link || ''} aria-invalid=${!!errors.link} aria-describedby="e-link" onInput=${(e) => set('link', e.target.value)} />
         ${errors.link ? html`<span class="msg err" id="e-link"><${Icon} n="info" c="xs" />${errors.link}</span>` : f.link && normUrl(f.link) && !(tplData && tplData.url && f.link === tplData.url) ? html`<span class="msg hint" id="e-link"><${Icon} n="info" c="xs" />Adds a “Cancel on ${hostOf(normUrl(f.link))}” shortcut. We never cancel for you.</span>` : null}</div>
-      <div class="field"><label for="f-note">Note (optional)</label><textarea id="f-note" class="input" placeholder="e.g. Family plan, shared with Sam" value=${f.note} onInput=${(e) => set('note', e.target.value)}></textarea></div>
+      <div class="field"><label for="f-note">Note (optional)</label><textarea id="f-note" class="input" placeholder="e.g. Family plan, shared with Sam" value=${f.note} aria-describedby=${garbled(f.note) ? 'e-note' : undefined} onInput=${(e) => set('note', e.target.value)}></textarea>
+        ${garbled(f.note) && html`<span class="msg warn" id="e-note"><${Icon} n="alert" c="xs" />Some letters came through as “?”. The app you copied from lost them — copy the text again from the original, or type it here.</span>`}</div>
       <div class="row" style=${{ justifyContent: 'flex-end' }}><${Btn} v="ghost" onClick=${cancel}>Cancel<//><button type="submit" class="btn primary" disabled=${saving} aria-busy=${saving}>${saving ? html`<span class="spinner"></span>Saving…` : html`<${Icon} n="check" />${editing ? 'Save changes' : 'Save reminder'}`}</button></div>
     </div>
     <aside class="preview" aria-label="Preview">
