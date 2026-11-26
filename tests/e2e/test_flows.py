@@ -180,8 +180,18 @@ def test_search_finds_reminder(page: Page, base_url, errors):
 def test_phone_width_has_no_sideways_scroll(page: Page, base_url, errors):
     page.set_viewport_size({"width": 375, "height": 812})
     start_demo(page, base_url)
-    for route in ("dashboard", "reminders", "new"):
-        page.goto(base_url + "/#/" + route)
+
+    def check(where):
         page.wait_for_timeout(300)
         overflow = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
-        assert overflow <= 0, f"#{route} scrolls sideways by {overflow}px at 375px wide"
+        assert overflow <= 0, f"{where} scrolls sideways by {overflow}px at 375px wide"
+
+    for route in ("dashboard", "reminders", "new"):
+        page.goto(base_url + "/#/" + route)
+        expect(page.locator(".skel, [aria-busy=true]")).to_have_count(0)
+        check("#" + route)
+    page.goto(base_url + "/#/reminders")
+    page.get_by_role("radio", name="List view").click()
+    check("list view")
+    search = page.locator("#ls").bounding_box()
+    assert search["height"] < 60, "search box should not stretch into a tall empty block"

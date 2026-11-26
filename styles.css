@@ -1,6 +1,6 @@
 :root{
   --bg:#F2F3F7; --bg-warm:#F3EEE8; --surface:#FFFFFF; --subtle:#F2F3F7; --muted:#E8E9EF; --pressed:#CFD2DF;
-  --text:#16132B; --text-2:#46425E; --text-3:#6B6F82; --inverse:#FFFFFF; --inverse-bg:#16132B; --inverse-raised:#2E2A4C; --accent-text:#DCD3FD;
+  --text:#16132B; --text-2:#46425E; --text-3:#62667A; --inverse:#FFFFFF; --inverse-bg:#16132B; --inverse-raised:#2E2A4C; --accent-text:#DCD3FD;
   --border:#C9CCD7; --brand:#5740B8; --brand-subtle:#EFEBFD; --primary:#16132B; --primary-hover:#2E2A4C;
   --success:#176C44; --success-subtle:#E2F3E9; --warning:#8A5400; --warning-subtle:#FDF3D7; --danger:#B42332; --danger-subtle:#FFF0F1;
   --rose:#F2AED3; --sky:#A9E4EE; --lavender:#BBA9F6; --yellow:#F4E39A; --peach:#F7B98A;
@@ -419,3 +419,30 @@ svg.icon{max-width:none}
 /* List rows are clickable but their text stays selectable/copyable */
 .rrow{cursor:pointer;user-select:text;-webkit-user-select:text}
 .rrow:focus-visible{outline:3px solid var(--brand);outline-offset:-3px}
+
+/* Phone fixes (visual QA, 26 Nov): no sideways scroll in the list filters and the form,
+   tap targets of at least 40px for filters and view switch. */
+@media (max-width:860px){
+  .filters-row>.grow{flex:0 0 auto;min-width:0}            /* in a column, 220px basis became a 220px tall gap */
+  .filters-card,.filters-row,.filters-row>*{min-width:0;max-width:100%}  /* scrolling tabs must not stretch the row */
+  .filters-card .scroll-x{margin:0 -12px;padding:0 12px}    /* match the card's 12px padding (was -16px) */
+  .filters-card .seg button,.filters-card .chip,.filters-card .view-seg button{min-height:40px}
+  .filters-card .input{height:44px!important}
+  .badge-btn{min-height:32px}
+}
+@media (max-width:860px){
+  /* search and status tabs full width; Sort and the view switch share one line */
+  .filters-row{flex-direction:row!important;flex-wrap:wrap;align-items:center!important}
+  .filters-row>.grow,.filters-row>.seg.scroll-x{flex:1 1 100%}
+  .filters-card .view-seg{margin-left:auto}
+}
+@media (max-width:480px){
+  .nm-line{flex-direction:column;align-items:flex-start;gap:0}   /* name gets the full width; category below */
+  .nm-line .nm-cat{font-size:13px;line-height:18px}
+  .field .seg{flex-wrap:nowrap}
+  .field .seg button{flex:1 1 0;min-width:0;padding:8px 4px;font-size:14px}  /* Weekly / Monthly / Yearly / One-time fit */
+}
+
+/* Skip link: hidden until focused with the keyboard (Tab), then shown at the top left. */
+.skip:focus{position:fixed;left:12px;top:12px;width:auto;height:auto;clip:auto;margin:0;padding:10px 14px;background:var(--surface);color:var(--brand);border-radius:8px;box-shadow:var(--shadow-m);z-index:100;outline:3px solid var(--brand)}
+.login:focus,.onb:focus,.main:focus{outline:none}
