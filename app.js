@@ -1,5 +1,5 @@
 /* Renewal Reminder — interactive prototype (demo data only). React 18 + htm, no build step. */
-const { useState, useEffect, useRef, useMemo, useCallback } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } = React;
 const html = htm.bind(React.createElement);
 const R = window.RR;
 
@@ -413,6 +413,26 @@ function ProfileSheet({ ctx, onClose }) {
   </div></div>`;
 }
 
+// A text field that grows with its text instead of scrolling inside itself (Mobbin: Brainly, Hinge).
+// oneLine keeps it a single value (no new lines) but lets long text, like a link, wrap.
+function GrowText({ value, onInput, oneLine, className = '', ...rest }) {
+  const ref = useRef(null);
+  const fit = () => { const el = ref.current; if (!el) return; el.style.height = 'auto'; el.style.height = el.scrollHeight + (el.offsetHeight - el.clientHeight) + 'px'; };
+  useLayoutEffect(fit, [value]);
+  return html`<textarea ref=${ref} rows="1" class=${'input grow-text' + (oneLine ? ' one-line' : '') + (className ? ' ' + className : '')} value=${value}
+    onInput=${(e) => { if (oneLine && /\n/.test(e.target.value)) e.target.value = e.target.value.replace(/\s*\n\s*/g, ' '); onInput(e); }}
+    onKeyDown=${oneLine ? (e) => { if (e.key === 'Enter') e.preventDefault(); } : undefined}
+    onFocus=${fit} onBlur=${fit} ...${rest}></textarea>`;
+}
+const NOTE_MAX = 1000; // same limit as firestore.rules
+
+// Clear (x) button inside a field, shown only when it has text (Mobbin: TikTok, Cash App, Oura).
+// single: fixed-height one-line field, the button is centred vertically.
+function Clear({ show, label, target, onClear, single, children }) {
+  return html`<div class=${'clear-wrap' + (show ? ' on' : '') + (single ? ' single' : '')}>${children}
+    ${show && html`<button type="button" class="clear-btn" aria-label=${label} title=${label} onMouseDown=${(e) => e.preventDefault()} onClick=${() => { onClear(); const t = document.getElementById(target); if (t) t.focus(); }}><${Icon} n="x" c="xs" /></button>`}</div>`;
+}
+
 // Empty state (Figma S2): mascot, message, primary action, popular templates that pre-fill the form
 function EmptyState({ title = 'No reminders yet' }) {
   const pop = ['Netflix', 'Spotify Family', 'iCloud+'];
@@ -770,7 +790,7 @@ function DecideLater({ r, ctx, onClose }) {
     <div class="row gap12"><div class="grow"><h2 class="h2" id="dl-h">Decide later</h2><span class="c2">${r.name} · ${r.amount ? money(r.amount) + ' · ' : ''}renews ${fmt(r.date)} (${rel(n0).toLowerCase()})</span>${passed && html`<span class="msg warn" style=${{ display: 'flex', marginTop: 6 }}><${Icon} n="info" c="xs" />${n0 === 0 ? 'This charge is today' : 'This charge date has passed'}, so it may already have gone through. ${nextCharge ? `Pick a reminder before the next one on ${fmt(nextCharge)}.` : 'Pick when to remind you.'}</span>`}</div><button class="icon-btn" aria-label="Cancel. Nothing changes." onClick=${close}><${Icon} n="x" c="s" /></button></div>
     <div class="col gap12" role="radiogroup" aria-labelledby="dl-r"><b id="dl-r">What’s stopping you right now? <span class="c3" style=${{ fontWeight: 400 }}>(optional)</span></b><div class="row wrap">${R.REASONS.map((x) => html`<button class="chip" role="radio" aria-checked=${reason === x} data-autofocus=${x === R.REASONS[0] ? true : undefined} onClick=${() => { setReason(x); setErr(''); }}>${reason === x && html`<${Icon} n="check" c="s" />`}${x}</button>`)}</div>
       ${err && html`<span class="msg err"><${Icon} n="info" c="xs" />${err}</span>`}
-      <label class="sr-only" for="dl-note">Note</label><input id="dl-note" class="input" placeholder=${reason === 'Other' ? 'What’s stopping you? (optional)' : 'Note for future you, e.g. “Ask Sam for the password” (optional)'} value=${note} onInput=${(e) => setNote(e.target.value)} /></div>
+      <label class="sr-only" for="dl-note">Note</label><${Clear} show=${!!note} label="Clear note" target="dl-note" onClear=${() => setNote('')}><${GrowText} id="dl-note" maxlength=${NOTE_MAX} placeholder=${reason === 'Other' ? 'What’s stopping you? (optional)' : 'Note for future you, e.g. “Ask Sam for the password” (optional)'} value=${note} onInput=${(e) => setNote(e.target.value)} /><//></div>
     <div class="col" style=${{ gap: 8 }} role="radiogroup" aria-labelledby="dl-f"><b id="dl-f">Remind me again</b>
       ${opts.map((o) => html`<button class="radio" role="radio" aria-checked=${!custom && pick === o.date && o.ok} aria-disabled=${!o.ok} onClick=${() => { if (!o.ok) { setWhy(o.d < 1 ? 'That’s today — pick a later time.' : `Not later than ${fmt(charge)}: after that, ${r.name} renews before you decide.`); return; } setPick(o.date); setCustom(''); setWhy(''); }}>
         <span class="dot"></span><span class="grow"><span style=${{ display: 'block', fontWeight: 500 }}>${o.l}</span><span class="small c3">${o.d >= 1 ? fmt(o.date) + ', 9:00' : 'Not available'}${!o.ok && o.d >= 1 ? ' — after the charge' : ''}</span></span>${!o.ok && html`<${Icon} n="lock" c="s" />`}</button>`)}
@@ -942,9 +962,9 @@ function CreateForm({ ctx, editId }) {
     <div class="card col gap24" style=${{ padding: 32, borderRadius: 16 }}>
       ${!editing && html`<div class="col gap12"><h2 class="h3">Quick start</h2>
         <div style=${{ position: 'relative' }}><label for="tpl" class="sr-only">Search service templates</label>
-          <div class="input-wrap"><input id="tpl" class="input" style=${{ paddingLeft: 44 }} role="combobox" aria-expanded=${open} aria-controls="tpl-list" aria-autocomplete="list" autocomplete="off" placeholder="Search services, e.g. Netflix, Spotify, iCloud" value=${q}
+          <div class="input-wrap"><${Clear} single show=${!!q} label="Clear search" target="tpl" onClear=${() => { setQ(''); setOpen(true); }}><input id="tpl" class="input" style=${{ paddingLeft: 44 }} role="combobox" aria-expanded=${open} aria-controls="tpl-list" aria-autocomplete="list" autocomplete="off" placeholder="Search services, e.g. Netflix, Spotify, iCloud" value=${q}
             onInput=${(e) => { setQ(e.target.value); setOpen(true); setHi(0); }} onFocus=${() => setOpen(true)} onClick=${() => setOpen(true)} onBlur=${() => setTimeout(() => setOpen(false), 150)}
-            onKeyDown=${(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHi(Math.min(hi + 1, results.length)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(Math.max(hi - 1, 0)); } else if (e.key === 'Enter') { e.preventDefault(); hi < results.length ? applyTpl(results[hi]) : manual(); } else if (e.key === 'Escape') { setOpen(false); } }} />
+            onKeyDown=${(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHi(Math.min(hi + 1, results.length)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(Math.max(hi - 1, 0)); } else if (e.key === 'Enter') { e.preventDefault(); hi < results.length ? applyTpl(results[hi]) : manual(); } else if (e.key === 'Escape') { setOpen(false); } }} /><//>
             <span style=${{ position: 'absolute', left: 14, top: 14 }} class="c3"><${Icon} n="search" /></span></div>
           ${open && html`<div class="listbox" id="tpl-list" role="listbox" aria-label=${q.trim() ? 'Matching services' : 'Popular subscriptions'}><div class="lb-h" aria-hidden="true">${q.trim() ? (results.length ? 'Results' : 'No matching service') : 'Popular subscriptions'}</div>${results.map((t, i) => html`<div class="option" role="option" aria-selected=${i === hi} onMouseDown=${(e) => { e.preventDefault(); applyTpl(t); }}><${Logo} r=${t} size="sm" /><span class="grow"><b>${q.trim() && t.name.toLowerCase().startsWith(q.trim().toLowerCase()) ? html`<span class="hl">${t.name.slice(0, q.trim().length)}</span>${t.name.slice(q.trim().length)}` : t.name}</b><span class="small c3" style=${{ display: 'block' }}>${cat(t.category).one}${t.amount ? ` · ${money(t.amount)} / ${cyc(t.cycle).per}` : ''}</span></span></div>`)}
             <div class="option" role="option" aria-selected=${hi === results.length} onMouseDown=${(e) => { e.preventDefault(); manual(); }}><span class="logo sm" style=${{ background: 'var(--subtle)' }}><${Icon} n="pencil" c="xs" /></span><b>${q.trim() ? `Enter “${q.trim()}” manually` : 'Enter manually'}</b></div></div>`}
@@ -952,7 +972,7 @@ function CreateForm({ ctx, editId }) {
         <div class="row wrap">${R.TEMPLATES.slice(0, 6).map((t) => html`<button type="button" class="chip" aria-pressed=${tpl === t.name} onClick=${() => applyTpl(t)}>${tpl === t.name && html`<${Icon} n="check" c="s" />`}${t.name}</button>`)}<button type="button" class="chip dashed" onClick=${manual}><${Icon} n="pencil" c="xs" />Enter manually</button></div>
         <hr style=${{ border: 0, borderTop: '1px solid var(--muted)', margin: 0 }} /></div>`}
       <div class="grid2">
-        <div class="field"><label for="f-name">Name <span aria-hidden="true">*</span></label><input id="f-name" class=${'input' + (errors.name ? ' err' : '')} value=${f.name} required aria-invalid=${!!errors.name} aria-describedby=${errors.name ? 'e-name' : undefined} onInput=${(e) => set('name', e.target.value)} />${errors.name && html`<span class="msg err" id="e-name"><${Icon} n="info" c="xs" />${errors.name}</span>`}${!errors.name && dupName && html`<span class="msg warn"><${Icon} n="info" c="xs" />You already have ${dupName}. Add it again only for a separate account or plan.</span>`}</div>
+        <div class="field"><label for="f-name">Name <span aria-hidden="true">*</span></label><${Clear} show=${!!f.name} label="Clear name" target="f-name" onClear=${() => set('name', '')}><${GrowText} oneLine id="f-name" className=${errors.name ? 'err' : ''} maxlength="80" value=${f.name} required aria-invalid=${!!errors.name} aria-describedby=${errors.name ? 'e-name' : undefined} onInput=${(e) => set('name', e.target.value)} /><//>${errors.name && html`<span class="msg err" id="e-name"><${Icon} n="info" c="xs" />${errors.name}</span>`}${!errors.name && dupName && html`<span class="msg warn"><${Icon} n="info" c="xs" />You already have ${dupName}. Add it again only for a separate account or plan.</span>`}</div>
         <div class="field"><label for="f-cat">Category</label><select id="f-cat" class="input" value=${f.category} onChange=${(e) => set('category', e.target.value)}>${R.CATEGORIES.map((c) => html`<option value=${c.id}>${c.one}</option>`)}</select></div>
       </div>
       ${!isDoc && html`<div class="field"><label for="f-amount">Amount (optional)</label><div class="input-wrap"><span style=${{ position: 'absolute', left: 16, top: 13 }} class="c2 body-l">€</span><input id="f-amount" inputmode="decimal" class=${'input' + (errors.amount || amountBad ? ' err' : '')} style=${{ paddingLeft: 32 }} placeholder="0.00" value=${f.amount} aria-invalid=${!!(errors.amount || amountBad)} aria-describedby="e-amount" onInput=${(e) => set('amount', e.target.value)} /></div>
@@ -966,9 +986,10 @@ function CreateForm({ ctx, editId }) {
           if (lead !== null && f.remind < pref) return html`<span class="msg hint"><${Icon} n="info" c="xs" />Only ${lead} ${lead === 1 ? 'day' : 'days'} left, so we’ll remind you ${f.remind} ${f.remind === 1 ? 'day' : 'days'} before.</span>`;
           return null; })()}</div>
       <div class="field"><span class="flabel" id="ch-l">Channel</span><div class="seg" role="radiogroup" aria-labelledby="ch-l">${[['browser', 'Browser'], ['email', 'Email']].map(([id, l]) => html`<button type="button" role="radio" aria-checked=${f.channel === id} onClick=${() => set('channel', id)}>${l}</button>`)}</div></div>
-      <div class="field"><label for="f-link">Link to cancel or manage (optional)</label><input id="f-link" class=${'input' + (errors.link ? ' err' : '')} inputmode="url" autocomplete="off" placeholder="e.g. netflix.com/cancelplan" value=${f.link || ''} aria-invalid=${!!errors.link} aria-describedby="e-link" onInput=${(e) => set('link', e.target.value)} />
+      <div class="field"><label for="f-link">Link to cancel or manage (optional)</label><${Clear} show=${!!f.link} label="Clear link" target="f-link" onClear=${() => set('link', '')}><${GrowText} oneLine id="f-link" className=${errors.link ? 'err' : ''} inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. netflix.com/cancelplan" value=${f.link || ''} aria-invalid=${!!errors.link} aria-describedby="e-link" onInput=${(e) => set('link', e.target.value)} /><//>
         ${errors.link ? html`<span class="msg err" id="e-link"><${Icon} n="info" c="xs" />${errors.link}</span>` : f.link && normUrl(f.link) && !(tplData && tplData.url && f.link === tplData.url) ? html`<span class="msg hint" id="e-link"><${Icon} n="info" c="xs" />Adds a “Cancel on ${hostOf(normUrl(f.link))}” shortcut. We never cancel for you.</span>` : null}</div>
-      <div class="field"><label for="f-note">Note (optional)</label><textarea id="f-note" class="input" placeholder="e.g. Family plan, shared with Sam" value=${f.note} aria-describedby=${garbled(f.note) ? 'e-note' : undefined} onInput=${(e) => set('note', e.target.value)}></textarea>
+      <div class="field"><label for="f-note">Note (optional)</label><${Clear} show=${!!f.note} label="Clear note" target="f-note" onClear=${() => set('note', '')}><${GrowText} id="f-note" maxlength=${NOTE_MAX} placeholder="e.g. Family plan, shared with Sam" value=${f.note} aria-describedby=${garbled(f.note) ? 'e-note' : f.note.length > NOTE_MAX - 100 ? 'n-count' : undefined} onInput=${(e) => set('note', e.target.value)} /><//>
+        ${f.note.length > NOTE_MAX - 100 && html`<span class="small c3" id="n-count" aria-live="polite" style=${{ alignSelf: 'flex-end' }}>${f.note.length} / ${NOTE_MAX}</span>`}
         ${garbled(f.note) && html`<span class="msg warn" id="e-note"><${Icon} n="alert" c="xs" />Some letters came through as “?”. The app you copied from lost them — copy the text again from the original, or type it here.</span>`}</div>
       <div class="row" style=${{ justifyContent: 'flex-end' }}><${Btn} v="ghost" onClick=${cancel}>Cancel<//><button type="submit" class="btn primary" disabled=${saving} aria-busy=${saving}>${saving ? html`<span class="spinner"></span>Saving…` : html`<${Icon} n="check" />${editing ? 'Save changes' : 'Save reminder'}`}</button></div>
     </div>
@@ -1092,7 +1113,7 @@ function ListScreen({ ctx }) {
   return html`${header}
     <div class="card col filters-card" role="search">
       <div class="row gap12 filters-row">
-        <div class="grow" style=${{ position: 'relative' }}><label for="ls" class="sr-only">Search reminders</label><input id="ls" class="input" style=${{ height: 44, paddingLeft: 42 }} placeholder="Search by name or note" value=${q} onInput=${(e) => setQ(e.target.value)} /><span class="c3" style=${{ position: 'absolute', left: 13, top: 12 }}><${Icon} n="search" /></span></div>
+        <div class="grow" style=${{ position: 'relative' }}><label for="ls" class="sr-only">Search reminders</label><${Clear} single show=${!!q} label="Clear search" target="ls" onClear=${() => setQ('')}><input id="ls" class="input" style=${{ height: 44, paddingLeft: 42 }} placeholder="Search by name or note" value=${q} onInput=${(e) => setQ(e.target.value)} /><//><span class="c3" style=${{ position: 'absolute', left: 13, top: 12 }}><${Icon} n="search" /></span></div>
         <div class="seg scroll-x" role="radiogroup" aria-label="Status">${[['all', 'All'], ['unfinished', `Unfinished · ${counts.unfinished}`], ['next30', `Next 30 days · ${counts.next30}`], ['cancelled', `Cancelled · ${counts.cancelled}`]].map(([id, l]) => html`<button role="radio" aria-checked=${status === id} onClick=${() => setStatus(id)} style=${{ whiteSpace: 'nowrap' }}>${l}</button>`)}</div>
         ${view === 'list' && html`<label class="row c2" style=${{ gap: 6 }}><span class="small">Sort</span><select class="input" style=${{ height: 44, width: 'auto' }} value=${sort} onChange=${(e) => setSort(e.target.value)}><option value="date">Date</option><option value="amount">Amount</option><option value="name">Name</option></select></label>`}
         ${all.length > 0 && html`<div class="seg view-seg" role="radiogroup" aria-label="View">${[['calendar', 'Calendar view', 'calendar'], ['list', 'List view', 'list']].map(([id, l, ic]) => html`<button role="radio" aria-checked=${view === id} aria-label=${l} title=${l} onClick=${() => setView(id)}><${Icon} n=${ic} c="s" /></button>`)}</div>`}
