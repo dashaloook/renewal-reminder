@@ -488,3 +488,18 @@ svg.icon{max-width:none}
 @keyframes toast-down{from{transform:translateY(-16px);opacity:0}}
 @keyframes sheet-up{from{transform:translateY(100%)}}
 @media (prefers-reduced-motion:reduce){.toast,.sheet{animation:none}}
+
+/* Growing text fields: hug their text instead of scrolling inside (note, link, decide-later note) */
+textarea.input.grow-text{resize:none;overflow:hidden;min-height:96px}
+textarea.input.grow-text.one-line{min-height:48px;padding-top:12px;padding-bottom:12px;line-height:22px;overflow-wrap:anywhere}
+textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{padding-top:11px;padding-bottom:11px}
+#dl-note{min-height:48px}
+/* Clear button inside the note (grey circle with x, shown only when there is text) */
+.clear-wrap{position:relative;width:100%}
+.clear-wrap.on .input{padding-right:48px!important}
+.clear-wrap.on .input:focus,.clear-wrap.on .input.err,.clear-wrap.on .input.warn{padding-right:47px!important}
+.clear-wrap.single .clear-btn{top:50%;transform:translateY(-50%)}
+.clear-btn{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:50%;border:0;background:var(--muted);color:var(--text-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.clear-btn::before{content:'';position:absolute;inset:-8px}  /* 44px touch area */
+.clear-btn:hover{background:var(--border);color:var(--text)}
+.clear-btn:focus-visible{outline:3px solid var(--brand);outline-offset:2px}

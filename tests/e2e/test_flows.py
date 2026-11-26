@@ -226,3 +226,18 @@ def test_next_years_dates_show_the_year(page: Page, base_url, errors):
     days = (dt.date(dt.date.today().year + 1, 1, 15) - dt.date.today()).days  # mid-January next year
     add_reminder(page, "QA Next Year", days=days).get_by_role("button", name="Go to my list").click()
     expect(open_details(page, "QA Next Year")).to_contain_text(f"15 January {dt.date.today().year + 1}")
+
+
+def test_note_grows_and_clear_button_empties_it(page: Page, base_url, errors):
+    start_demo(page, base_url)
+    page.goto(base_url + "/#/new")
+    page.locator(".chip", has_text="Enter manually").click()
+    note = page.locator("#f-note")
+    expect(page.get_by_role("button", name="Clear note")).to_have_count(0)
+    empty_h = note.bounding_box()["height"]
+    note.fill("Довга нотатка, яка займає кілька рядків. " * 12)
+    assert note.bounding_box()["height"] > empty_h * 2, "note should grow with its text"
+    assert note.evaluate("e => e.scrollHeight - e.clientHeight") <= 0, "no scrolling inside the note"
+    page.get_by_role("button", name="Clear note").click()
+    expect(note).to_have_value("")
+    expect(note).to_be_focused()
