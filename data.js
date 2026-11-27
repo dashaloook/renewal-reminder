@@ -39,6 +39,7 @@
     { name: 'iCloud+', url: 'https://support.apple.com/HT207594', category: 'subscription', amount: 2.99, cycle: 'monthly', tone: 'sky' },
     { name: 'YouTube Premium', url: 'https://www.youtube.com/paid_memberships', category: 'subscription', amount: 11.99, cycle: 'monthly', tone: 'rose' },
     { name: 'ChatGPT Plus', url: 'https://help.openai.com/en/articles/7232927', category: 'subscription', amount: 20, cycle: 'monthly', tone: 'sky' },
+    { name: 'Claude', url: 'https://claude.ai/settings/billing', category: 'subscription', amount: 18, cycle: 'monthly', tone: 'peach' },
     { name: 'Adobe Creative Cloud', url: 'https://account.adobe.com/plans', category: 'subscription', amount: 24.19, cycle: 'monthly', tone: 'peach' },
     { name: 'Amazon Prime', url: 'https://www.amazon.com/gp/primecentral', category: 'subscription', amount: 8.99, cycle: 'monthly', tone: 'yellow' },
     { name: 'Gym membership', category: 'payment', amount: 29, cycle: 'monthly', tone: 'yellow' },

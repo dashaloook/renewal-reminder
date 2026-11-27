@@ -448,21 +448,21 @@ const ONB = [
   { name: 'Netflix', tone: 'rose', plans: [['With ads', 5.99], ['Standard', 13.99], ['Premium', 19.99]], def: 1, days: 6 },
   { name: 'Spotify', tpl: 'Spotify Family', tone: 'yellow', plans: [['Individual', 11.99], ['Duo', 16.99], ['Family', 19.99]], def: 0, days: 12 },
   { name: 'ChatGPT', tpl: 'ChatGPT Plus', tone: 'sky', plans: [['Plus', 20], ['Pro', 200]], def: 0, days: 17 },
+  { name: 'Claude', tone: 'peach', plans: [['Pro', 18], ['Max 5×', 90], ['Max 20×', 180]], def: 0, days: 19 },
   { name: 'iCloud+', tone: 'sky', plans: [['50 GB', 0.99], ['200 GB', 2.99], ['2 TB', 9.99]], def: 1, days: 9 },
   { name: 'YouTube Premium', tone: 'rose', plans: [['Individual', 12.99], ['Family', 25.99]], def: 0, days: 15 },
   { name: 'Disney+', tone: 'lavender', plans: [['With ads', 5.99], ['Standard', 9.99], ['Premium', 13.99]], def: 1, days: 21 },
   { name: 'Amazon Prime', tone: 'yellow', plans: [['Monthly', 8.99, 'monthly'], ['Yearly', 89.9, 'yearly']], def: 0, days: 24 },
   { name: 'Adobe Creative Cloud', tone: 'peach', plans: [['Photography', 11.99], ['All Apps', 62.99]], def: 0, days: 27 },
 ];
-const ONB_DEMO = ['Netflix', 'Spotify', 'ChatGPT'];
+const ONB_DEFAULT = [ONB[0].name]; // only the first service is preselected
 const onbPlan = (s, i) => { const [label, amount, cycle] = s.plans[i]; return { label, amount, cycle: cycle || 'monthly' }; };
 const perMonth = (p) => (p.cycle === 'yearly' ? p.amount / 12 : p.amount);
 
 function Onboarding({ ctx }) {
   const [step, setStep] = useState(1);
-  const demo = !(ctx.state.account === 'new' || isCloud(ctx.state.account));
-  // picks: { [service name]: { plan: index, date: 'YYYY-MM-DD' } }
-  const [picks, setPicks] = useState(() => Object.fromEntries((demo ? ONB_DEMO : []).map((n) => { const s = ONB.find((x) => x.name === n); return [n, { plan: s.def, date: R.off(s.days) }]; })));
+    // picks: { [service name]: { plan: index, date: 'YYYY-MM-DD' } }
+  const [picks, setPicks] = useState(() => Object.fromEntries(ONB_DEFAULT.map((n) => { const s = ONB.find((x) => x.name === n); return [n, { plan: s.def, date: R.off(s.days) }]; })));
   const [added, setAdded] = useState([]);
   const toggle = (s) => setPicks((p) => { const n = { ...p }; if (n[s.name]) delete n[s.name]; else n[s.name] = { plan: s.def, date: R.off(s.days) }; return n; });
   const setPick = (name, patch) => setPicks((p) => ({ ...p, [name]: { ...p[name], ...patch } }));
