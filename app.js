@@ -463,7 +463,7 @@ function Onboarding({ ctx }) {
   const [step, setStep] = useState(1);
     // picks: { [service name]: { plan: index, date: 'YYYY-MM-DD' } }
   const [picks, setPicks] = useState(() => Object.fromEntries(ONB_DEFAULT.map((n) => { const s = ONB.find((x) => x.name === n); return [n, { plan: s.def, date: R.off(s.days) }]; })));
-  const [added, setAdded] = useState([]);
+  const [added, setAdded] = useState([]); const [made, setMade] = useState([]);
   const toggle = (s) => setPicks((p) => { const n = { ...p }; if (n[s.name]) delete n[s.name]; else n[s.name] = { plan: s.def, date: R.off(s.days) }; return n; });
   const setPick = (name, patch) => setPicks((p) => ({ ...p, [name]: { ...p[name], ...patch } }));
   const chosen = ONB.filter((s) => picks[s.name]).map((s) => ({ s, p: onbPlan(s, picks[s.name].plan), date: picks[s.name].date }));
@@ -476,8 +476,10 @@ function Onboarding({ ctx }) {
     const recs = fresh.map((c) => ({ id: 'ob-' + uid(), name: c.s.name, category: 'subscription', amount: c.p.amount, cycle: c.p.cycle, date: c.date, remind: 7, channel: defaultChannel(), link: tpl(c).url || '',
       note: c.s.plans.length > 1 ? `${c.p.label} plan` : '', status: 'active', reason: '', followUp: '', tone: c.s.tone, history: [{ type: 'created', date: R.iso(R.today()), text: 'Added during setup' }] }));
     if (recs.length) ctx.update((st) => ({ reminders: [...st.reminders, ...recs] }));
-    setAdded(chosen); setStep(3);
+    setMade(recs.map((r) => r.id)); setAdded(chosen); setStep(3);
   };
+  // Back from step 3 takes back the reminders just added, so changing the choice never duplicates them.
+  const back = () => { if (step === 3 && made.length) { const ids = new Set(made); ctx.update((st) => ({ reminders: st.reminders.filter((r) => !ids.has(r.id)) })); setMade([]); } setStep(step - 1); };
   const headRef = useRef(null);
   useEffect(() => { headRef.current && headRef.current.focus(); }, [step]);
   const total = (m) => html`<b>${money(m)}</b>/month · <b>${money(m * 12)}</b>/year`;
@@ -508,12 +510,13 @@ function Onboarding({ ctx }) {
     ${added.length > 0 && html`<ul class="onb3-sum">${added.slice().sort((a, b) => a.date.localeCompare(b.date)).map((c) => html`<li><${Logo} r=${{ name: c.s.name, tone: c.s.tone }} size="sm" /><span class="grow"><b>${c.s.name}</b><span class="small c3">${c.p.label} · renews ${fmt(c.date)}</span></span><span class="small cb">🔔 ${fmt(R.iso(R.addDays(R.parse(c.date), -7)) < R.iso(R.today()) ? R.iso(R.today()) : R.iso(R.addDays(R.parse(c.date), -7)))}</span></li>`)}</ul>`}
     <ol class="onb3-flow" aria-label="How it works"><li><span class="t-brand">🔔</span>We remind you 7 days before</li><li><span class="t-amber">🤔</span>Keep, cancel or decide later</li><li><span class="t-green">✅</span>No surprise charges</li></ol>`;
 
+  const backBtn = html`<${Btn} v="secondary" icon="chevron-left" onClick=${back}>Back<//>`;
   const foot = step === 1 ? html`<${Btn} full iconR="arrow-right" onClick=${() => setStep(2)}>Let’s find yours<//>`
-    : step === 2 ? html`<div class="small c2 onb3-total" aria-live="polite">${chosen.length ? html`${chosen.length} selected · ${total(monthly)}` : 'Nothing selected yet'}</div><${Btn} full iconR="arrow-right" onClick=${create}>${chosen.length ? `Add ${chosen.length} reminder${chosen.length > 1 ? 's' : ''}` : 'Continue without adding'}<//>`
-    : html`<${Btn} full iconR="arrow-right" data-autofocus onClick=${leave}>Go to my dashboard<//>`;
+    : step === 2 ? html`<div class="small c2 onb3-total" aria-live="polite">${chosen.length ? html`${chosen.length} selected · ${total(monthly)}` : 'Nothing selected yet'}</div><div class="onb3-btns">${backBtn}<${Btn} iconR="arrow-right" class="grow" onClick=${create}>${chosen.length ? `Add ${chosen.length} reminder${chosen.length > 1 ? 's' : ''}` : 'Continue without adding'}<//></div>`
+    : html`<div class="onb3-btns">${backBtn}<${Btn} iconR="arrow-right" class="grow" data-autofocus onClick=${leave}>Go to my dashboard<//></div>`;
 
   return html`<main class="onb onb3" id="main" tabindex="-1">
-    <div class="onb3-top">${step === 2 ? html`<button type="button" class="icon-btn" aria-label="Back" onClick=${() => setStep(1)}><${Icon} n="chevron-left" /></button>` : html`<span class="brand-mark" style=${{ width: 32, height: 32 }} aria-hidden="true"><${Icon} n="bell" c="s" /></span>`}
+    <div class="onb3-top"><span class="brand-mark" style=${{ width: 32, height: 32 }} aria-hidden="true"><${Icon} n="bell" c="s" /></span>
       <div class="onb3-prog" role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow=${step} aria-label=${`Step ${step} of 3`}>${[1, 2, 3].map((i) => html`<i class=${i <= step ? 'on' : ''}></i>`)}</div>
       ${step < 3 ? html`<${Btn} v="ghost" sm onClick=${leave}>Skip<//>` : html`<span style=${{ width: 56 }}></span>`}</div>
     <section class=${'onb3-body s' + step} aria-labelledby="onb-h">${body}</section>

@@ -288,3 +288,24 @@ def test_statistics_hide_categories_without_costs(page: Page, base_url, errors):
     start_demo(page, base_url)
     card = page.locator(".card", has=page.get_by_role("heading", name="Spend by category"))
     expect(card).not_to_contain_text("No cost")
+
+
+def test_onboarding_back_takes_back_added_reminders(page: Page, base_url, errors):
+    page.goto(base_url + "/")
+    page.get_by_role("button", name="Try the demo without signing up").click()
+    page.get_by_role("button", name="Let’s find yours").click()
+    page.get_by_role("button", name=re.compile("^Claude")).click()
+    page.get_by_role("button", name="Add 2 reminders").click()
+    expect(page.get_by_role("heading", name="You’re covered 🎉")).to_be_visible()
+    page.get_by_role("button", name="Back").click()                      # back to step 2, Claude removed again
+    expect(page.get_by_role("heading", name="What do you pay for?")).to_be_visible()
+    page.get_by_role("button", name=re.compile("^Claude")).click()       # unselect Claude
+    page.get_by_role("button", name="Add 1 reminder").click()
+    page.get_by_role("button", name="Back").click()
+    page.get_by_role("button", name="Back").click()                      # back to step 1
+    expect(page.get_by_role("heading", name="No more surprise charges.")).to_be_visible()
+    page.get_by_role("button", name="Let’s find yours").click()
+    page.get_by_role("button", name="Add 1 reminder").click()
+    page.get_by_role("button", name="Go to my dashboard").click()
+    page.goto(base_url + "/#/reminders")
+    expect(find(page, "Claude")).to_have_count(0)
