@@ -442,74 +442,82 @@ function EmptyState({ title = 'No reminders yet' }) {
     <div class="row wrap" style=${{ justifyContent: 'center', gap: 8 }} role="group" aria-label="Popular services"><span class="small c3">Popular:</span>${pop.map((n) => html`<button type="button" class="chip" onClick=${() => start(n)}>${n}</button>`)}</div></div>`;
 }
 
-// ---------- Onboarding (v2: 3 steps, skippable) ----------
-const ONB_SERVICES = ['Netflix', 'Spotify Family', 'ChatGPT Plus', 'iCloud+'];
+// ---------- Onboarding (v3: 3 short steps — pain → pick your first reminders → you're covered) ----------
+// Plans and prices are typical EU list prices (estimates); people can change them later.
+const ONB = [
+  { name: 'Netflix', tone: 'rose', plans: [['With ads', 5.99], ['Standard', 13.99], ['Premium', 19.99]], def: 1, days: 6 },
+  { name: 'Spotify', tpl: 'Spotify Family', tone: 'yellow', plans: [['Individual', 11.99], ['Duo', 16.99], ['Family', 19.99]], def: 0, days: 12 },
+  { name: 'ChatGPT', tpl: 'ChatGPT Plus', tone: 'sky', plans: [['Plus', 20], ['Pro', 200]], def: 0, days: 17 },
+  { name: 'iCloud+', tone: 'sky', plans: [['50 GB', 0.99], ['200 GB', 2.99], ['2 TB', 9.99]], def: 1, days: 9 },
+  { name: 'YouTube Premium', tone: 'rose', plans: [['Individual', 12.99], ['Family', 25.99]], def: 0, days: 15 },
+  { name: 'Disney+', tone: 'lavender', plans: [['With ads', 5.99], ['Standard', 9.99], ['Premium', 13.99]], def: 1, days: 21 },
+  { name: 'Amazon Prime', tone: 'yellow', plans: [['Monthly', 8.99, 'monthly'], ['Yearly', 89.9, 'yearly']], def: 0, days: 24 },
+  { name: 'Adobe Creative Cloud', tone: 'peach', plans: [['Photography', 11.99], ['All Apps', 62.99]], def: 0, days: 27 },
+];
+const ONB_DEMO = ['Netflix', 'Spotify', 'ChatGPT'];
+const onbPlan = (s, i) => { const [label, amount, cycle] = s.plans[i]; return { label, amount, cycle: cycle || 'monthly' }; };
+const perMonth = (p) => (p.cycle === 'yearly' ? p.amount / 12 : p.amount);
+
 function Onboarding({ ctx }) {
   const [step, setStep] = useState(1);
-  const [reason, setReason] = useState('No access to account'); const [posted, setPosted] = useState(false);
-  const [sel, setSel] = useState(ctx.state.account === 'new' || isCloud(ctx.state.account) ? [] : ['Netflix', 'Spotify Family', 'ChatGPT Plus']);
-  const [why, setWhy] = useState(false); const [other, setOther] = useState(false); const [busy, setBusy] = useState(false);
-  const services = ONB_SERVICES.map((n) => R.TEMPLATES.find((t) => t.name === n));
-  const chosen = services.filter((s) => sel.includes(s.name)); const monthly = chosen.reduce((a, s) => a + s.amount, 0);
+  const demo = !(ctx.state.account === 'new' || isCloud(ctx.state.account));
+  // picks: { [service name]: { plan: index, date: 'YYYY-MM-DD' } }
+  const [picks, setPicks] = useState(() => Object.fromEntries((demo ? ONB_DEMO : []).map((n) => { const s = ONB.find((x) => x.name === n); return [n, { plan: s.def, date: R.off(s.days) }]; })));
+  const [added, setAdded] = useState([]);
+  const toggle = (s) => setPicks((p) => { const n = { ...p }; if (n[s.name]) delete n[s.name]; else n[s.name] = { plan: s.def, date: R.off(s.days) }; return n; });
+  const setPick = (name, patch) => setPicks((p) => ({ ...p, [name]: { ...p[name], ...patch } }));
+  const chosen = ONB.filter((s) => picks[s.name]).map((s) => ({ s, p: onbPlan(s, picks[s.name].plan), date: picks[s.name].date }));
+  const monthly = chosen.reduce((a, c) => a + perMonth(c.p), 0);
   const leave = () => { ctx.update(() => ({ onboarded: true })); go('dashboard'); };
-  const finish = () => {
-    if (!chosen.length) { leave(); return; }
-    setBusy(true);
-    setTimeout(() => {
-      const have = ctx.state.reminders.map((r) => r.name);
-      const fresh = chosen.filter((s) => !have.includes(s.name));
-      ctx.update((s) => ({ onboarded: true, reminders: [...s.reminders, ...fresh.map((t, i) => ({ id: 'ob-' + uid(), name: t.name, category: t.category, amount: t.amount, cycle: t.cycle, date: R.off(5 + i * 4), remind: 7, channel: defaultChannel(), note: '', status: 'active', reason: '', followUp: '', tone: t.tone, history: [{ type: 'created', date: R.iso(R.today()), text: 'Added during setup' }] }))] }));
-      ctx.showToast(fresh.length ? `${fresh.length} service${fresh.length > 1 ? 's' : ''} added to your list` : 'Your services are already in the list', fresh.length ? 'Check the charge dates in My reminders — prices and dates are estimates.' : 'Demo data already includes them.', null);
-      go('dashboard');
-    }, 600);
+  const create = () => {
+    const have = new Set(ctx.state.reminders.map((r) => r.name.toLowerCase()));
+    const fresh = chosen.filter((c) => !have.has(c.s.name.toLowerCase()));
+    const tpl = (c) => R.TEMPLATES.find((t) => t.name === (c.s.tpl || c.s.name)) || {};
+    const recs = fresh.map((c) => ({ id: 'ob-' + uid(), name: c.s.name, category: 'subscription', amount: c.p.amount, cycle: c.p.cycle, date: c.date, remind: 7, channel: defaultChannel(), link: tpl(c).url || '',
+      note: c.s.plans.length > 1 ? `${c.p.label} plan` : '', status: 'active', reason: '', followUp: '', tone: c.s.tone, history: [{ type: 'created', date: R.iso(R.today()), text: 'Added during setup' }] }));
+    if (recs.length) ctx.update((st) => ({ reminders: [...st.reminders, ...recs] }));
+    setAdded(chosen); setStep(3);
   };
   const headRef = useRef(null);
   useEffect(() => { headRef.current && headRef.current.focus(); }, [step]);
-  const bar = html`<div class="onb-prog" role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow=${step} aria-label=${`Step ${step} of 3`}><span class="small c3">${step} / 3</span><span class="segs" aria-hidden="true">${[1, 2, 3].map((i) => html`<i class=${i <= step ? 'on' : ''}></i>`)}</span></div>`;
-  const timeline = [['Today', 'Netflix renews in 7 days. We let you know.', 'bell', 'brand'], ['Tomorrow', 'Not now? Postpone with a reason.', 'hourglass', 'amber'], ['In 5 days', 'We remind you, with your note.', 'reset', 'brand'], ['In 7 days · charge date', 'You’ve decided. No surprise.', 'circle-check', 'green']];
-  return html`<main class="onb" id="main" tabindex="-1">
-    <div class="onb-top"><div class="brand" style=${{ padding: 0 }}><span class="brand-mark"><${Icon} n="bell" c="s" /></span>Renewal Reminder<${Demo} /></div><${Btn} v="ghost" sm onClick=${leave}>${step === 3 ? 'I’ll add later' : 'Skip'}<//></div>
-    <section class="onb-card wide" aria-labelledby="onb-h">
-      ${bar}
-      <div class="onb-cols">
-        <div class="col gap16 onb-copy">
-          ${step === 1 && html`<h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>Decide before you’re charged.</h1><p class="body-l c2" style=${{ margin: 0 }}>We warn you a week early, and keep your decision open if you need more time.</p>`}
-          ${step === 2 && html`<h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>Can’t decide now?<br />Postpone it.</h1><p class="body-l c2" style=${{ margin: 0 }}>Say why and when. We hold it for you and remind you before the charge date.</p>`}
-          ${step === 3 && html`<h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>Which of these<br />do you pay for?</h1><p class="body-l c2" style=${{ margin: 0 }}>Pick your services. We’ll total them and add them to your list.</p>
-            <p class="row c2" style=${{ margin: 0, alignItems: 'flex-start' }}><${Icon} n="shield" c="s" style=${{ color: 'var(--success)', marginTop: 2 }} /><span>We never connect to your bank. You decide what to add, and only that is stored. <button type="button" class="link" aria-expanded=${why} onClick=${() => setWhy(!why)}>How we use your data</button></span></p>
-            ${why && html`<div class="small c2" role="note" style=${{ padding: '10px 12px', background: 'var(--subtle)', borderRadius: 8 }}>We store only the reminders you create: name, amount, date and your notes. No bank access, no email scanning, no selling data. In this prototype everything stays in your browser.</div>`}`}
-        </div>
-        <div class="onb-panel">
-          ${step === 1 && html`<div class="card pad24 col gap16" style=${{ boxShadow: 'var(--shadow-s)' }}>
-            <div class="row gap12"><span class="logo tone-rose">N</span><b class="h3 grow">Netflix · €15.49</b><span class="badge t-neutral">Example</span></div>
-            <ol class="tl" aria-label="How a renewal goes with Renewal Reminder">${timeline.map(([d, t, ic, tn]) => html`<li><span class=${'dot t-' + tn}><${Icon} n=${ic} c="s" /></span><div><b>${d}</b><div class="c2">${t}</div></div></li>`)}</ol></div>`}
-          ${step === 2 && html`<div class="col gap16">
-            <div class="card pad24 col gap16" style=${{ boxShadow: 'var(--shadow-s)', border: '2px solid var(--brand-subtle)' }}>
-              <div class="row"><b class="h3 grow" id="why-l">Why are you postponing?</b><span class="badge t-brand">Try it</span></div>
-              <div class="row wrap" role="radiogroup" aria-labelledby="why-l">${R.REASONS.map((x) => html`<button type="button" class="chip" role="radio" aria-checked=${reason === x} onClick=${() => { setReason(x); setPosted(false); }}>${reason === x && html`<${Icon} n="check" c="s" />`}${x}</button>`)}</div>
-              <div class="row" style=${{ padding: '10px 12px', background: 'var(--subtle)', borderRadius: 8, flexWrap: 'wrap' }}><${Icon} n="clock" c="s cb" /><span class="grow">Remind me tomorrow, 9:00</span><span class="badge t-amber"><${Icon} n="lock" />Latest: day before charge</span></div>
-              <${Btn} icon="hourglass" full disabled=${posted} onClick=${() => setPosted(true)}>${posted ? 'Postponed' : 'Postpone'}<//>
-            </div>
-            <div class="small c3 row" style=${{ justifyContent: 'center' }}><${Icon} n="chevron-down" c="s" />Then it waits here</div>
-            <div class="card pad20 col gap12" aria-live="polite" style=${{ border: posted ? '2px solid var(--brand-subtle)' : '1px dashed var(--border)', background: posted ? 'var(--surface)' : 'transparent' }}>
-              <div class="row cb"><${Icon} n="hourglass" c="s" /><b style=${{ color: 'var(--text)' }}>Unfinished decisions</b></div>
-              ${posted ? html`<div class="row gap12"><span class="logo sm tone-rose">N</span><div class="col"><b>Netflix · €15.49</b><span class="small c3">${reason} · reminder tomorrow, 9:00</span></div></div>` : html`<span class="small c3">Press “Postpone” to see Netflix land here.</span>`}
-            </div></div>`}
-          ${step === 3 && html`<div class="card pad24 col gap16" style=${{ boxShadow: 'var(--shadow-s)' }}>
-            <div class="row"><b class="h3 grow" id="svc-l">Your services</b><span class="small c3" aria-live="polite">${sel.length} selected</span></div>
-            <div class="row wrap" role="group" aria-labelledby="svc-l">${services.map((s) => { const on = sel.includes(s.name); return html`<button type="button" class="chip" aria-pressed=${on} onClick=${() => setSel(on ? sel.filter((x) => x !== s.name) : [...sel, s.name])}>${on && html`<${Icon} n="check" c="s" />`}${s.name} · ${money(s.amount)}</button>`; })}
-              <button type="button" class="chip dashed" aria-expanded=${other} onClick=${() => setOther(!other)}><${Icon} n="plus" c="xs" />Other service</button></div>
-            ${other && html`<span class="msg hint" role="status"><${Icon} n="info" c="xs" />Any other service can be added in “My reminders” after setup.</span>`}
-            <span class="small c3">Prices are estimates. You can edit them later.</span>
-            <div class="totals" aria-live="polite"><div><div class="c2">Per month</div><div class="v">${money(monthly)}</div></div><div style=${{ background: 'var(--brand-subtle)' }}><div class="c2">Per year</div><div class="v cb">${money(monthly * 12)}</div></div></div>
-            <div class="c2" aria-live="polite">${sel.length ? `≈ ${money(monthly * 12)} a year across ${sel.length} service${sel.length > 1 ? 's' : ''}` : 'Tap a service above to see what it costs you per year.'}</div></div>`}
-        </div>
-      </div>
-      <div class="row onb-footer" style=${{ justifyContent: 'space-between' }}>
-        ${step > 1 ? html`<${Btn} v="ghost" icon="chevron-left" onClick=${() => setStep(step - 1)}>Back<//>` : html`<span></span>`}
-        ${step < 3 ? html`<${Btn} iconR="arrow-right" onClick=${() => setStep(step + 1)}>Next<//>` : html`<${Btn} iconR="arrow-right" loading=${busy} onClick=${finish}>${sel.length ? `Add ${sel.length} service${sel.length > 1 ? 's' : ''}` : 'Continue without adding'}<//>`}
-      </div>
-    </section>
+  const total = (m) => html`<b>${money(m)}</b>/month · <b>${money(m * 12)}</b>/year`;
+
+  const body = step === 1 ? html`
+    <div class="onb3-hero" aria-hidden="true">
+      <div class="onb3-alert bad"><span class="onb3-emo">😬</span><div class="grow"><b>Netflix</b><span class="small c2">Charged today · you forgot to cancel</span></div><b class="danger-txt">−€13.99</b></div>
+      <span class="onb3-vs">instead</span>
+      <div class="onb3-alert good"><span class="onb3-emo">🙂</span><div class="grow"><b>Netflix renews in 7 days</b><span class="small c2">Keep it, cancel it, or decide later</span></div><span class="badge t-brand">Reminder</span></div>
+    </div>
+    <h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>No more surprise charges.</h1>
+    <p class="body-l c2 onb3-sub">We remind you a week before you pay. You decide.</p>
+    <p class="onb3-stat"><span class="onb3-stat-n">42%</span><span>of people found they were still paying for a subscription they forgot about. <a class="link small" href="https://www.cnbc.com/2022/09/06/consumers-underestimate-monthly-subscription-costs-by-at-least-100.html" target="_blank" rel="noopener">Source</a></span></p>`
+  : step === 2 ? html`
+    <h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>What do you pay for?</h1>
+    <p class="body-l c2 onb3-sub">Tap to add — these become your first reminders. Pick your plan and next charge date.</p>
+    <ul class="onb3-list" aria-label="Services">${ONB.map((s) => { const on = !!picks[s.name]; const pk = picks[s.name]; const cheapest = Math.min(...s.plans.map((x) => x[1]));
+      return html`<li class=${'onb3-svc' + (on ? ' on' : '')} key=${s.name}>
+        <button type="button" class="onb3-svc-head" aria-pressed=${on} onClick=${() => toggle(s)}><${Logo} r=${{ name: s.name, tone: s.tone }} size="sm" /><span class="grow"><b>${s.name}</b><span class="small c3">${on ? `${onbPlan(s, pk.plan).label} · ${money(onbPlan(s, pk.plan).amount)} / ${onbPlan(s, pk.plan).cycle === 'yearly' ? 'year' : 'month'}` : `from ${money(cheapest)}`}</span></span><span class="onb3-check" aria-hidden="true">${on ? html`<${Icon} n="check" c="s" />` : html`<${Icon} n="plus" c="s" />`}</span></button>
+        ${on && html`<div class="onb3-opts"><div class="row wrap" role="radiogroup" aria-label=${`${s.name} plan`}>${s.plans.map((pl, i) => html`<button type="button" class="chip sm" role="radio" aria-checked=${pk.plan === i} onClick=${() => setPick(s.name, { plan: i })}>${pl[0]} · ${money(pl[1])}</button>`)}</div>
+          <div class="row onb3-date"><span class="small c2">Next charge</span><${DateField} id=${'onb-d-' + s.name.replace(/\W/g, '')} height=${40} min=${R.iso(R.today())} value=${pk.date} onChange=${(v) => setPick(s.name, { date: v })} /></div></div>`}
+      </li>`; })}</ul>
+    <p class="small c3" style=${{ margin: 0 }}>Prices are typical list prices — change them anytime. Anything else? Add it from “My reminders” later.</p>`
+  : html`
+    <div class="onb3-done"><img src="duck-wave.png" width="120" height="120" alt="" class="onb3-duck" />
+      <h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>${added.length ? 'You’re covered 🎉' : 'All set 👋'}</h1>
+      <p class="body-l c2 onb3-sub">${added.length ? html`${added.length} reminder${added.length > 1 ? 's' : ''} · ${total(added.reduce((a, c) => a + perMonth(c.p), 0))}` : 'Add your first reminder whenever you’re ready.'}</p></div>
+    ${added.length > 0 && html`<ul class="onb3-sum">${added.slice().sort((a, b) => a.date.localeCompare(b.date)).map((c) => html`<li><${Logo} r=${{ name: c.s.name, tone: c.s.tone }} size="sm" /><span class="grow"><b>${c.s.name}</b><span class="small c3">${c.p.label} · renews ${fmt(c.date)}</span></span><span class="small cb">🔔 ${fmt(R.iso(R.addDays(R.parse(c.date), -7)) < R.iso(R.today()) ? R.iso(R.today()) : R.iso(R.addDays(R.parse(c.date), -7)))}</span></li>`)}</ul>`}
+    <ol class="onb3-flow" aria-label="How it works"><li><span class="t-brand">🔔</span>We remind you 7 days before</li><li><span class="t-amber">🤔</span>Keep, cancel or decide later</li><li><span class="t-green">✅</span>No surprise charges</li></ol>`;
+
+  const foot = step === 1 ? html`<${Btn} full iconR="arrow-right" onClick=${() => setStep(2)}>Let’s find yours<//>`
+    : step === 2 ? html`<div class="small c2 onb3-total" aria-live="polite">${chosen.length ? html`${chosen.length} selected · ${total(monthly)}` : 'Nothing selected yet'}</div><${Btn} full iconR="arrow-right" onClick=${create}>${chosen.length ? `Add ${chosen.length} reminder${chosen.length > 1 ? 's' : ''}` : 'Continue without adding'}<//>`
+    : html`<${Btn} full iconR="arrow-right" data-autofocus onClick=${leave}>Go to my dashboard<//>`;
+
+  return html`<main class="onb onb3" id="main" tabindex="-1">
+    <div class="onb3-top">${step === 2 ? html`<button type="button" class="icon-btn" aria-label="Back" onClick=${() => setStep(1)}><${Icon} n="chevron-left" /></button>` : html`<span class="brand-mark" style=${{ width: 32, height: 32 }} aria-hidden="true"><${Icon} n="bell" c="s" /></span>`}
+      <div class="onb3-prog" role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow=${step} aria-label=${`Step ${step} of 3`}>${[1, 2, 3].map((i) => html`<i class=${i <= step ? 'on' : ''}></i>`)}</div>
+      ${step < 3 ? html`<${Btn} v="ghost" sm onClick=${leave}>Skip<//>` : html`<span style=${{ width: 56 }}></span>`}</div>
+    <section class=${'onb3-body s' + step} aria-labelledby="onb-h">${body}</section>
+    <div class="onb3-foot">${foot}</div>
   </main>`;
 }
 

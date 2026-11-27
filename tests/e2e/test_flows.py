@@ -16,7 +16,7 @@ def iso(days):
 def start_demo(page: Page, base_url):
     page.goto(base_url + "/")
     page.get_by_role("button", name="Try the demo without signing up").click()
-    expect(page.get_by_role("heading", name="Decide before you’re charged.")).to_be_visible()
+    expect(page.get_by_role("heading", name="No more surprise charges.")).to_be_visible()
     page.get_by_role("button", name="Skip").click()
     expect(page).to_have_url(re.compile(r"#/dashboard$"))
 
@@ -76,15 +76,21 @@ def test_login_screen_offers_google_and_demo(page: Page, base_url, errors):
 def test_onboarding_adds_picked_services(page: Page, base_url, errors):
     page.goto(base_url + "/")
     page.get_by_role("button", name="Try the demo without signing up").click()
-    page.get_by_role("button", name="Next").click()
-    expect(page.get_by_role("heading", name=re.compile("Can’t decide now"))).to_be_visible()
-    page.get_by_role("button", name="Next").click()
-    expect(page.get_by_text("3 selected")).to_be_visible()  # the demo suggests three
-    page.locator('[aria-labelledby="svc-l"] .chip').first.click()
-    expect(page.get_by_text("2 selected")).to_be_visible()
-    page.get_by_role("button", name="Add 2 services").click()
+    expect(page.get_by_role("heading", name="No more surprise charges.")).to_be_visible()
+    page.get_by_role("button", name="Let’s find yours").click()
+    expect(page.get_by_role("heading", name="What do you pay for?")).to_be_visible()
+    expect(page.get_by_role("button", name="Add 3 reminders")).to_be_visible()  # the demo suggests three
+    page.get_by_role("button", name=re.compile("^Netflix")).click()             # remove Netflix
+    page.get_by_role("button", name=re.compile("^Disney\\+")).click()          # add Disney+
+    page.get_by_role("radiogroup", name="Disney+ plan").get_by_role("radio", name=re.compile("Premium")).click()
+    page.get_by_role("button", name="Add 3 reminders").click()
+    expect(page.get_by_role("heading", name="You’re covered 🎉")).to_be_visible()
+    expect(page.locator(".onb3-sum")).to_contain_text("Disney+")
+    expect(page.locator(".onb3-sum")).to_contain_text("Premium")
+    page.get_by_role("button", name="Go to my dashboard").click()
     expect(page).to_have_url(re.compile(r"#/dashboard$"))
-    expect(page.get_by_role("status").get_by_text(re.compile("added to your list|already in the list"))).to_be_visible()
+    page.goto(base_url + "/#/reminders")
+    expect(find(page, "Disney+")).to_contain_text("€13.99")
 
 
 def test_add_reminder_shows_in_list_with_note(page: Page, base_url, errors):
