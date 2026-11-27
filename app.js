@@ -420,6 +420,25 @@ function ProfileSheet({ ctx, onClose }) {
   </div></div>`;
 }
 
+// Pasting from a Mac via Universal Clipboard can bring a plain-text copy whose letters became "?"
+// (e.g. Cyrillic). The formatted (HTML) copy usually still has them, so use that one instead.
+function htmlToText(markup) {
+  const doc = new DOMParser().parseFromString(markup, 'text/html');   // parsed only, never run
+  doc.querySelectorAll('br').forEach((b) => b.replaceWith('\n'));
+  doc.querySelectorAll('p,div,li,tr,h1,h2,h3,h4,h5,h6,blockquote').forEach((el) => el.append('\n'));
+  return (doc.body ? doc.body.textContent : '').replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+function fixGarbledPaste(e, oneLine, onInput) {
+  const cd = e.clipboardData; if (!cd) return;
+  const plain = cd.getData('text/plain'); if (!garbled(plain)) return;
+  const markup = cd.getData('text/html'); if (!markup) return;
+  let text = htmlToText(markup); if (!text || garbled(text)) return;
+  if (oneLine) text = text.replace(/\s*\n\s*/g, ' ');
+  e.preventDefault();
+  const el = e.target; el.setRangeText(text, el.selectionStart, el.selectionEnd, 'end');
+  onInput({ target: el });
+}
+
 // A text field that grows with its text instead of scrolling inside itself (Mobbin: Brainly, Hinge).
 // oneLine keeps it a single value (no new lines) but lets long text, like a link, wrap.
 function GrowText({ value, onInput, oneLine, className = '', ...rest }) {
@@ -429,7 +448,7 @@ function GrowText({ value, onInput, oneLine, className = '', ...rest }) {
   return html`<textarea ref=${ref} rows="1" class=${'input grow-text' + (oneLine ? ' one-line' : '') + (className ? ' ' + className : '')} value=${value}
     onInput=${(e) => { if (oneLine && /\n/.test(e.target.value)) e.target.value = e.target.value.replace(/\s*\n\s*/g, ' '); onInput(e); }}
     onKeyDown=${oneLine ? (e) => { if (e.key === 'Enter') e.preventDefault(); } : undefined}
-    onFocus=${fit} onBlur=${fit} ...${rest}></textarea>`;
+    onPaste=${(e) => fixGarbledPaste(e, oneLine, onInput)} onFocus=${fit} onBlur=${fit} ...${rest}></textarea>`;
 }
 const NOTE_MAX = 1000; // same limit as firestore.rules
 
@@ -650,8 +669,8 @@ function Dashboard({ ctx }) {
       ${[['This month', money(a.month), 'Monthly equivalent of active items'], ['Per year (projection)', money(a.year), 'Incl. one-time costs in the next 12 months'], ['Next 30 days', `${a.next30Count} charge${a.next30Count === 1 ? '' : 's'}`, `${money(a.next30Sum)} in total`], ['Decided on time', state.stats.total ? `${state.stats.onTime} of ${state.stats.total}` : '—', state.stats.total ? 'Decisions made before the charge date' : 'Fills in after your first decision']].map(([l, v, c]) => html`<div class="card kpi"><div class="c2">${l}</div><div class="v">${v}</div><div class="small c3">${c}</div></div>`)}
     </section>
     <section class="charts">
-      <div class="card pad24 col gap16"><div><h2 class="h3">Spend by category</h2><span class="small c3">Projected per year</span></div><${CatBars} data=${a.byCat} /></div>
-      <div class="card pad24 col gap16"><div><h2 class="h3">Charges over the next 6 months</h2><span class="small c3">Total per month, from today</span></div>
+      <div class="card pad24 col gap16 chart-card"><div><h2 class="h3">Spend by category</h2><span class="small c3">Projected per year · tap a category to see it in the calendar</span></div><${CatBars} data=${a.byCat} /></div>
+      <div class="card pad24 col gap16 chart-card"><div><h2 class="h3">Charges over the next 6 months</h2><span class="small c3">Total per month · tap a month to open it</span></div>
         ${chartErr ? html`<div class="empty" style=${{ background: 'var(--subtle)', borderRadius: 12, padding: 32 }}><span class="ic t-amber"><${Icon} n="alert" /></span><b>We couldn’t load this chart</b><span class="c2">Your reminders are safe. Check your connection and try again.</span><${Btn} v="secondary" sm icon="refresh" loading=${retrying} onClick=${() => { setRetrying(true); setTimeout(() => { setRetrying(false); if (navigator.onLine) { QS = QS === 'error' ? null : QS; ctx.update(() => ({ loadFail: false })); setChartErr(false); } }, 700); }}>Try again<//></div>` : html`<${MonthBars} data=${a.months} />`}
       </div>
     </section>
@@ -667,24 +686,25 @@ function UnfinishedCard({ r, ctx }) {
     <${ServiceLink} r=${r} />
   </article>`;
 }
+// Dashboard charts. Every bar is a button: a category opens the calendar filtered to it, a month opens that month.
+const openCalendar = ({ cat: c, focus }) => { try { if (c) sessionStorage.setItem('rr-cat', c); if (focus) sessionStorage.setItem('rr-focus', focus); } catch (e) { /* ok */ } go('reminders'); };
 function CatBars({ data: all }) {
   // Only categories that cost something, biggest first (empty ones just said "No cost").
   const data = all.filter((d) => d.value > 0).sort((a, b) => b.value - a.value);
   if (!data.length) return html`<span class="c2">No costs yet. Add an amount to a reminder to see where your money goes.</span>`;
-  const max = Math.max(...data.map((d) => d.value), 1); const total = data.reduce((s, d) => s + d.value, 0); const top = [...data].sort((a, b) => b.value - a.value)[0];
-  const desc = data.map((d) => `${d.label} ${d.value ? money(d.value) : 'no cost'}`).join(', ');
-  return html`<div class="col gap12" role="img" aria-label=${`Bar chart, spend per year by category: ${desc}.`}>
-    ${data.map((d) => html`<div class="row gap12" key=${d.id}><span class="c2" style=${{ width: 100 }}>${d.label}</span><svg class="grow" height="12" aria-hidden="true"><rect width="100%" height="12" rx="6" fill="var(--subtle)" /><rect width=${`${Math.max(d.value / max * 100, d.value ? 2 : 1.5)}%`} height="12" rx="6" fill=${d.value ? 'var(--brand)' : 'var(--muted)'} /></svg><b style=${{ width: 84, textAlign: 'right' }}>${d.value ? money(d.value) : 'No cost'}</b></div>`)}
-    <span class="small c3">${data.length === 1 ? `All your yearly costs are ${top.label.toLowerCase()}.` : `${top.label} are the biggest share: ${Math.round(top.value / total * 100)}% of your yearly total.`}</span></div>`;
+  const max = Math.max(...data.map((d) => d.value), 1); const total = data.reduce((s, d) => s + d.value, 0); const top = data[0];
+  return html`<div class="cb-rows">${data.map((d) => html`<button type="button" class="cb-row" key=${d.id} aria-label=${`${d.label}: ${money(d.value)} a year. Show in the calendar`} onClick=${() => openCalendar({ cat: d.id })}>
+      <span class="c2 cb-lab">${d.label}</span><span class="cb-track" aria-hidden="true"><i class="cb-fill" style=${{ width: `${Math.max(d.value / max * 100, 3)}%` }}></i></span><b class="cb-val">${money(d.value)}</b><span class="c3 cb-go" aria-hidden="true"><${Icon} n="chevron-right" c="s" /></span></button>`)}</div>
+    <span class="small c3">${data.length === 1 ? `All your yearly costs are ${top.label.toLowerCase()}.` : `${top.label} are the biggest share: ${Math.round(top.value / total * 100)}% of your yearly total.`}</span>`;
 }
 function MonthBars({ data }) {
-  const max = Math.max(...data.map((d) => d.value), 1); const W = 420, H = 190, bw = 40, gap = (W - bw * data.length) / (data.length - 1);
-  const peak = [...data].sort((a, b) => b.value - a.value).slice(0, 2).map((d) => d.long.split(' ')[0]);
-  return html`<div><svg viewBox=${`0 0 ${W} ${H}`} width="100%" role="img" aria-label=${'Bar chart, charges per month: ' + data.map((d) => `${d.long} ${money(d.value)}`).join(', ')}>
-    ${data.map((d, i) => { const h = Math.max(d.value / max * 130, 3); const x = i * (bw + gap); const isPeak = peak.includes(d.long.split(' ')[0]);
-      return html`<g key=${i}><text x=${x + bw / 2} y=${H - 26 - h - 6} text-anchor="middle" font-size="11" fill="var(--text)">${money(d.value)}</text><rect x=${x} y=${H - 26 - h} width=${bw} height=${h} rx="6" fill=${isPeak ? 'var(--brand)' : 'var(--lavender)'} /><text x=${x + bw / 2} y=${H - 8} text-anchor="middle" font-size="12" fill="var(--text-2)">${d.label}</text></g>`; })}
-  </svg><span class="small c3">Peaks in ${peak.join(' and ')}.</span>
-  <table class="sr-only"><caption>Charges per month</caption><tbody>${data.map((d) => html`<tr><th>${d.long}</th><td>${money(d.value)}</td></tr>`)}</tbody></table></div>`;
+  const max = Math.max(...data.map((d) => d.value), 1);
+  const peak = [...data].sort((a, b) => b.value - a.value).slice(0, 2).filter((d) => d.value > 0).map((d) => d.long);
+  const todayIso = R.iso(R.today());
+  return html`<div class="mb" role="group" aria-label="Charges per month">${data.map((d) => { const isPeak = peak.includes(d.long);
+      return html`<button type="button" class="mb-col" key=${d.long} aria-label=${`${d.long}: ${money(d.value)}. Open in the calendar`} onClick=${() => openCalendar({ focus: d.start.slice(0, 7) === todayIso.slice(0, 7) ? todayIso : d.start })}>
+        <span class="mb-val">${money(d.value)}</span><span class="mb-track" aria-hidden="true"><i class=${'mb-fill' + (isPeak ? ' peak' : '')} style=${{ height: `${d.value ? Math.max(d.value / max * 100, 4) : 0}%` }}></i></span><span class="mb-lab">${d.label}</span></button>`; })}</div>
+    <span class="small c3">${peak.length ? `Peaks in ${peak.map((l) => l.split(' ')[0]).join(' and ')}.` : 'No charges in the next 6 months.'}</span>`;
 }
 // The reminder's own note. row = list (2 lines max), card = Added/Saved card (own section under a divider).
 const NoteLine = ({ note, row, card }) => (note && note.trim()) ? html`<div class=${'note-line' + (row ? ' in-row' : '') + (card ? ' in-card' : '')} title=${row ? note : undefined}><span class="note-txt">${note.trim()}</span></div>` : null;
@@ -822,7 +842,8 @@ function DecideLater({ r, ctx, onClose }) {
 }
 function Confirm({ title, body, tip, ok, danger, onOk, onClose }) {
   const ref = useOverlay(onClose);
-  return html`<div class="scrim" style=${{ zIndex: 58 }} onClick=${onClose}></div><div class="dialog" style=${{ width: 480, zIndex: 61 }} role="alertdialog" aria-modal="true" aria-labelledby="cf-h" aria-describedby="cf-b" ref=${ref}>
+  return html`<div class="scrim" style=${{ zIndex: 58 }} onClick=${onClose}></div><div class="dialog alert" style=${{ width: 480, zIndex: 61 }} role="alertdialog" aria-modal="true" aria-labelledby="cf-h" aria-describedby="cf-b" ref=${ref}>
+    ${danger && html`<span class="logo lg" style=${{ background: 'var(--danger-subtle)', color: 'var(--danger)' }}><${Icon} n="trash" /></span>`}
     <h2 class="h2" id="cf-h">${title}</h2><p class="c2" id="cf-b" style=${{ margin: 0 }}>${body}</p>${tip && html`<div class="row small c2" style=${{ padding: '8px 12px', background: 'var(--subtle)', borderRadius: 8 }}><${Icon} n="info" c="s" />${tip}</div>`}
     <div class="row" style=${{ justifyContent: 'flex-end' }}><${Btn} v="secondary" data-autofocus onClick=${onClose}>${danger ? 'Keep reminder' : 'Cancel'}<//><${Btn} v=${danger ? 'danger' : 'primary'} icon=${danger ? 'trash' : undefined} onClick=${() => { onOk(); onClose(); }}>${ok}<//></div></div>`;
 }
@@ -845,7 +866,7 @@ function DeleteAccount({ ctx, count, onDelete, onClose }) {
     }
   };
   return html`<div class="scrim" style=${{ zIndex: 58 }} onClick=${close}></div>
-  <div class="dialog" style=${{ width: 500, zIndex: 61 }} role="alertdialog" aria-modal="true" aria-labelledby="da-h" aria-describedby="da-b" ref=${ref}>
+  <div class="dialog alert" style=${{ width: 500, zIndex: 61 }} role="alertdialog" aria-modal="true" aria-labelledby="da-h" aria-describedby="da-b" ref=${ref}>
     <span class="logo lg" style=${{ background: 'var(--danger-subtle)', color: 'var(--danger)' }}><${Icon} n="trash" /></span>
     <h2 class="h2" id="da-h">Delete your account?</h2>
     <div class="col gap12" id="da-b">
@@ -868,7 +889,7 @@ function DeleteAccount({ ctx, count, onDelete, onClose }) {
 // ---------- DateField: custom date picker in the app's style (replaces the native <input type="date">) ----------
 const WEEK_S = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 function DateField({ id, value, onChange, min, max, className = '', height, describedBy, invalid, placeholder = 'Select a date' }) {
-  const [open, setOpen] = useState(false); const [up, setUp] = useState(false); const [shiftX, setShiftX] = useState(0);
+  const [open, setOpen] = useState(false); const [up, setUp] = useState(false); const [shiftX, setShiftX] = useState(0); const [pickW, setPickW] = useState(316);
   const base = value ? R.parse(value) : R.today();
   const [month, setMonth] = useState(new Date(base.getFullYear(), base.getMonth(), 1));
   const [focus, setFocus] = useState(value || R.iso(R.today()));
@@ -877,7 +898,10 @@ function DateField({ id, value, onChange, min, max, className = '', height, desc
   const ok = (iso) => (!min || iso >= min) && (!max || iso <= max);
   const openIt = () => {
     const b = value ? R.parse(value) : R.today(); setMonth(new Date(b.getFullYear(), b.getMonth(), 1)); setFocus(value || (ok(todayIso) ? todayIso : (min || max || todayIso)));
-    try { const r = wrap.current.getBoundingClientRect(); setUp(window.innerHeight - r.bottom < 380 && r.top > 380); const vw = document.documentElement.clientWidth, w = Math.min(316, vw - 16); setShiftX(Math.max(8 - r.left, Math.min(0, vw - 8 - r.left - w)));  /* keep the picker fully on screen */ } catch (e) { /* ok */ }
+    try { const r = wrap.current.getBoundingClientRect(); setUp(window.innerHeight - r.bottom < 380 && r.top > 380); /* keep the picker inside its dialog/card (and the screen), never wider than the room it has */
+      const vw = document.documentElement.clientWidth; const host = wrap.current.closest('.dialog, .card, .onb3-svc'); const hb = host ? host.getBoundingClientRect() : { left: 0, right: vw };
+      const lo = Math.max(hb.left, 0) + 8, hi = Math.min(hb.right, vw) - 8; const w = Math.min(vw <= 480 ? 296 : 316, Math.max(260, hi - lo));
+      setPickW(w); setShiftX(Math.max(lo - r.left, Math.min(0, hi - r.left - w))); } catch (e) { /* ok */ }
     setOpen(true);
   };
   useEffect(() => {
@@ -905,7 +929,7 @@ function DateField({ id, value, onChange, min, max, className = '', height, desc
   return html`<div class="datefield" ref=${wrap}>
     <button type="button" id=${id} class=${'input datebtn ' + className + (open ? ' open' : '')} style=${height ? { height } : undefined} aria-haspopup="dialog" aria-expanded=${open} aria-invalid=${invalid ? 'true' : undefined} aria-describedby=${describedBy} onClick=${() => (open ? setOpen(false) : openIt())} onKeyDown=${(e) => { if ((e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') && !open) { e.preventDefault(); openIt(); } }}>
       <span class=${'grow' + (value ? '' : ' c3')}>${value ? fmt(value, { day: 'numeric', month: 'long', year: 'numeric' }) : placeholder}</span><${Icon} n="calendar" c="s" /></button>
-    ${open && html`<div class=${'dp' + (up ? ' up' : '')} style=${shiftX ? { left: shiftX + 'px' } : undefined} role="dialog" aria-label=${'Choose a date, ' + label} onKeyDown=${onKey}>
+    ${open && html`<div class=${'dp' + (up ? ' up' : '')} style=${{ left: shiftX + 'px', width: pickW + 'px' }} role="dialog" aria-label=${'Choose a date, ' + label} onKeyDown=${onKey}>
       <div class="dp-head"><b class="dp-title" aria-live="polite">${label}</b><span class="row" style=${{ gap: 4 }}><button type="button" class="icon-btn" aria-label="Today" title="Today" disabled=${!ok(todayIso)} onClick=${() => pick(todayIso)}><${Icon} n="calendar-today" c="s" /></button><button type="button" class="icon-btn" aria-label="Previous month" onClick=${() => shift(-1)}><${Icon} n="chevron-left" /></button><button type="button" class="icon-btn" aria-label="Next month" onClick=${() => shift(1)}><${Icon} n="chevron-right" /></button></span></div>
       <div class="dp-grid" role="grid" aria-label=${label} ref=${gridRef}>
         ${WEEK_S.map((w) => html`<span class="dp-wd" aria-hidden="true" key=${w}>${w}</span>`)}
@@ -1052,14 +1076,17 @@ const take = (k) => { try { const v = sessionStorage.getItem(k); sessionStorage.
 
 function ListScreen({ ctx }) {
   const loading = useLoading('list'); const compact = useCompact(); const maxChips = compact ? 1 : 2;
-  const [init] = useState(() => ({ filter: take('rr-filter'), focus: take('rr-focus') }));
+  const [init] = useState(() => { const o = { filter: take('rr-filter'), focus: take('rr-focus'), cat: take('rr-cat') };
+    // From a dashboard category: open the calendar on that category's next payment (up to a year ahead).
+    if (o.cat && !o.focus) { const t = R.today(); const d = ctx.state.reminders.filter((r) => r.status !== 'cancelled' && r.category === o.cat).flatMap((r) => occOf(r, t, R.addDays(t, 400))).sort((x, y) => x - y)[0]; if (d) o.focus = R.iso(d); }
+    return o; });
   const todayIso = R.iso(R.today());
-  const [q, setQ] = useState(''); const [catF, setCatF] = useState('all'); const [status, setStatus] = useState(init.filter || 'all'); const [sort, setSort] = useState('date'); const [view, setView] = useState('calendar');
+  const [q, setQ] = useState(''); const [catF, setCatF] = useState(init.cat || 'all'); const [status, setStatus] = useState(init.filter || 'all'); const [sort, setSort] = useState('date'); const [view, setView] = useState('calendar');
   // Default selection: the focused item's date, else the next day that has something due (so details aren't empty), else today.
   const [sel, setSel] = useState(() => {
     if (init.focus) return init.focus;
     const t = R.today(); const end = new Date(t.getFullYear(), t.getMonth() + 1, 0);
-    const first = ctx.state.reminders.filter((r) => r.status !== 'cancelled' && (init.filter !== 'unfinished' || r.status === 'unfinished')).flatMap((r) => occOf(r, t, end)).sort((x, y) => x - y)[0];
+    const first = ctx.state.reminders.filter((r) => r.status !== 'cancelled' && (init.filter !== 'unfinished' || r.status === 'unfinished') && (!init.cat || r.category === init.cat)).flatMap((r) => occOf(r, t, end)).sort((x, y) => x - y)[0];
     return first ? R.iso(first) : todayIso;
   });
   const [month, setMonth] = useState(() => firstOf(R.parse(init.focus || todayIso)));

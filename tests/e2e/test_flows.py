@@ -325,3 +325,48 @@ def test_famous_services_show_their_logo(page: Page, base_url, errors):
     page.get_by_role("radio", name="List view").click()
     expect(page.locator(".rrow", has_text="Netflix").locator(".brand-logo img")).to_have_attribute("src", "logos/netflix.svg")
     expect(page.locator(".rrow", has_text="Gym membership").locator(".logo")).to_have_text("G")
+
+
+def test_mac_paste_with_question_marks_uses_formatted_copy(page: Page, base_url, errors):
+    start_demo(page, base_url)
+    page.goto(base_url + "/#/new")
+    page.locator(".chip", has_text="Enter manually").click()
+    value = page.evaluate("""() => { const el = document.getElementById('f-note'); el.focus(); const dt = new DataTransfer();
+        dt.setData('text/plain', '?? Rive ???????? Realm: ?????????');
+        dt.setData('text/html', '<meta charset="utf-8"><p>Rive запускає Realm: платформу з іграми</p>');
+        el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return el.value; }""")
+    assert value == "Rive запускає Realm: платформу з іграми", value
+    expect(page.get_by_text(re.compile("came through as"))).to_have_count(0)
+
+
+def test_phone_date_picker_stays_inside_its_card(page: Page, base_url, errors):
+    page.set_viewport_size({"width": 375, "height": 812})
+    start_demo(page, base_url)
+    page.goto(base_url + "/#/new")
+    page.locator(".chip", has_text="Enter manually").click()
+    page.locator("#f-date").click()
+    box = page.evaluate("""() => { const a = document.querySelector('.dp').getBoundingClientRect(), h = document.getElementById('f-date').closest('.card').getBoundingClientRect();
+        return { inside: a.left >= h.left - 0.5 && a.right <= h.right + 0.5, w: a.width, sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth }; }""")
+    assert box["inside"] and box["w"] <= 296 and box["sideways"] <= 0, box
+
+
+def test_delete_confirmation_has_centred_icon_and_title(page: Page, base_url, errors):
+    start_demo(page, base_url)
+    add_reminder(page, "QA Confirm").get_by_role("button", name="Go to my list").click()
+    open_details(page, "QA Confirm").get_by_role("button", name="Delete").click()
+    confirm = page.get_by_role("alertdialog")
+    expect(confirm.locator(".logo")).to_be_visible()
+    expect(confirm.get_by_role("heading")).to_have_css("text-align", "center")
+
+
+def test_dashboard_charts_open_the_calendar(page: Page, base_url, errors):
+    start_demo(page, base_url)
+    page.locator(".cb-row", has_text="Insurance").click()
+    expect(page.locator('[aria-label="Category"] .chip[aria-pressed=true]')).to_contain_text("Insurance")
+    expect(page.locator(".cal-name")).not_to_contain_text("Nothing due")          # opens on its next payment
+    page.goto(base_url + "/#/dashboard")
+    month = page.locator(".mb-col").nth(3)
+    long_name = month.get_attribute("aria-label").split(":")[0]                    # e.g. "February 2027"
+    month.click()
+    expect(page.locator("#cal-h")).to_have_text(long_name)
+    assert page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth") <= 0
