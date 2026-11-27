@@ -324,7 +324,7 @@ def test_famous_services_show_their_logo(page: Page, base_url, errors):
     page.goto(base_url + "/#/reminders")
     page.get_by_role("radio", name="List view").click()
     expect(page.locator(".rrow", has_text="Netflix").locator(".brand-logo img")).to_have_attribute("src", "logos/netflix.svg")
-    expect(page.locator(".rrow", has_text="Gym membership").locator(".logo")).to_have_text("G")
+    expect(page.locator(".rrow", has_text="Gym membership").locator(".topic-logo svg")).to_have_count(1)  # dumbbell icon
 
 
 def test_mac_paste_with_question_marks_uses_formatted_copy(page: Page, base_url, errors):
@@ -370,3 +370,22 @@ def test_dashboard_charts_open_the_calendar(page: Page, base_url, errors):
     month.click()
     expect(page.locator("#cal-h")).to_have_text(long_name)
     assert page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth") <= 0
+
+
+def test_search_suggests_your_reminders_and_shows_results(page: Page, base_url, errors):
+    start_demo(page, base_url)
+    page.goto(base_url + "/#/reminders")
+    page.locator("#ls").click()
+    page.locator("#ls").fill("Net")
+    sug = page.get_by_role("listbox", name="Suggestions")
+    expect(sug.locator(".option").first).to_contain_text("Netflix")             # best match first
+    expect(page.locator(".cal")).to_have_count(0)                               # results page instead of the calendar
+    expect(page.locator(".search-head")).to_contain_text("results for “Net”")
+    sug.locator(".option").first.click()
+    expect(page.get_by_role("dialog", name="Netflix")).to_be_visible()
+    page.get_by_role("button", name="Close details").click()
+    expect(page.get_by_role("listbox", name="Suggestions")).to_have_count(0)
+    page.locator("#ls").fill("Disney")
+    expect(page.get_by_role("listbox", name="Suggestions")).to_contain_text("Add Disney+")
+    page.locator(".card.empty").get_by_role("button", name="Clear search").click()
+    expect(page.locator(".cal")).to_have_count(1)                               # calendar is back

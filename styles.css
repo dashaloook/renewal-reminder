@@ -645,3 +645,12 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
 .mb-fill.peak{background:var(--brand)}
 .mb-lab{font-size:13px;color:var(--text-2)}
 @media (max-width:480px){.cb-track{height:20px;border-radius:9px}.cb-fill{border-radius:9px}.cb-row{grid-template-columns:92px minmax(0,1fr) auto 0;gap:10px}.cb-go{display:none}.mb{gap:6px}.mb-val{font-size:11px}.mb-track{min-height:110px}}
+
+/* Search: suggestions under the box, and a results header instead of the calendar */
+.filters-row .listbox{top:calc(100% + 6px);z-index:30}
+.search-head{align-items:center;gap:12px;padding:2px 4px}
+
+/* Topic icons for items without a brand logo (same coloured circle, darker icon) */
+.logo.topic-logo{color:var(--text)}
+.logo.topic-logo .icon{width:20px;height:20px;stroke-width:1.8}
+.logo.sm.topic-logo .icon{width:16px;height:16px}.logo.lg.topic-logo .icon{width:24px;height:24px}
