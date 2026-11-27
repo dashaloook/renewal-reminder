@@ -73,7 +73,13 @@ const Demo = () => R.CLOUD_ACCOUNT ? null : html`<span class="demo-tag" role="no
 const ServiceLink = ({ r }) => r.link
   ? html`<a class="link" href=${r.link} target="_blank" rel="noopener noreferrer" aria-label=${`Cancel on ${hostOf(r.link)} (opens in a new tab)`}>Cancel on ${hostOf(r.link)}<${Icon} n="external" c="xs" /></a>`
   : html`<a class="link" href=${'#/edit/' + r.id}>Add a cancel link<${Icon} n="plus" c="xs" /></a>`;
-const Logo = ({ r, size = '' }) => html`<span class=${`logo ${size} tone-${r.tone || 'lavender'}`} aria-hidden="true">${(r.name || '?').trim().charAt(0).toUpperCase()}</span>`;
+// Real brand logos for well-known services (logos/, from Simple Icons, CC0); everything else keeps its letter.
+const BRANDS = [[/^netflix/, 'netflix'], [/^spotify/, 'spotify'], [/^(chatgpt|openai)/, 'chatgpt'], [/^claude/, 'claude'], [/^icloud/, 'icloud'],
+  [/^youtube/, 'youtube'], [/^amazon prime|^prime video/, 'amazonprime'], [/^adobe/, 'adobe']];
+const brandOf = (name) => { const n = String(name || '').trim().toLowerCase(); const b = BRANDS.find(([re]) => re.test(n)); return b ? b[1] : null; };
+const Logo = ({ r, size = '' }) => { const b = brandOf(r.name);
+  return b ? html`<span class=${`logo ${size} brand-logo`} aria-hidden="true"><img src=${`logos/${b}.svg`} alt="" width="24" height="24" loading="lazy" /></span>`
+    : html`<span class=${`logo ${size} tone-${r.tone || 'lavender'}`} aria-hidden="true">${(r.name || '?').trim().charAt(0).toUpperCase()}</span>`; };
 const UrgBadge = ({ r }) => { const n = R.daysUntil(r.date); const t = r.status === 'cancelled' ? 'neutral' : tone(n);
   return html`<span class=${'badge t-' + t}><${Icon} n=${t === 'red' ? 'alert' : 'clock'} />${r.category === 'document' && n >= 0 ? (n === 0 ? 'Expires today' : rel(n)) : rel(n)}</span>`; };
 const StatusBadge = ({ r }) => {

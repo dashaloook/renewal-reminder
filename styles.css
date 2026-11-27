@@ -606,3 +606,7 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
 .onb3-duck-sm{width:60px;height:60px;flex:none;object-fit:contain}
 .onb3-when{white-space:nowrap;font-weight:500}
 @media (max-width:480px){.onb3-duck-sm{width:52px;height:52px}}
+
+/* Brand logos: the real logo on a white circle with a thin outline (letters stay for other services) */
+.logo.brand-logo{background:#fff;box-shadow:inset 0 0 0 1px var(--muted)}
+.logo.brand-logo img{width:56%;height:56%;object-fit:contain;display:block}
