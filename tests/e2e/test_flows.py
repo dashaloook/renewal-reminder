@@ -309,3 +309,19 @@ def test_onboarding_back_takes_back_added_reminders(page: Page, base_url, errors
     page.get_by_role("button", name="Go to my dashboard").click()
     page.goto(base_url + "/#/reminders")
     expect(find(page, "Claude")).to_have_count(0)
+
+
+def test_famous_services_show_their_logo(page: Page, base_url, errors):
+    page.goto(base_url + "/")
+    page.get_by_role("button", name="Try the demo without signing up").click()
+    page.get_by_role("button", name="Let’s find yours").click()
+    logos = page.locator(".onb3-svc .brand-logo img")
+    expect(logos).to_have_count(8)                                   # all but Disney+
+    page.wait_for_function("[...document.querySelectorAll('.brand-logo img')].every(i => i.complete && i.naturalWidth > 0)")
+    disney = page.locator(".onb3-svc", has_text="Disney+").locator(".logo")
+    expect(disney).to_have_text("D")                                 # no free logo: keeps its letter
+    start_demo(page, base_url)
+    page.goto(base_url + "/#/reminders")
+    page.get_by_role("radio", name="List view").click()
+    expect(page.locator(".rrow", has_text="Netflix").locator(".brand-logo img")).to_have_attribute("src", "logos/netflix.svg")
+    expect(page.locator(".rrow", has_text="Gym membership").locator(".logo")).to_have_text("G")
