@@ -510,7 +510,7 @@ function Onboarding({ ctx }) {
       </li>`; })}</ul>
     <p class="small c3" style=${{ margin: 0 }}>Prices are typical list prices — change them anytime. Anything else? Add it from “My reminders” later.</p>`
   : html`
-    <div class="onb3-done"><img src="duck-wave.png" width="120" height="120" alt="" class="onb3-duck" />
+    <div class="onb3-done"><img src="duck-wave.png" width="128" height="128" alt="" class="onb3-duck" />
       <h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>${added.length ? 'You’re covered 🎉' : 'All set 👋'}</h1>
       <p class="body-l c2 onb3-sub">${added.length ? html`${added.length} reminder${added.length > 1 ? 's' : ''} · ${total(added.reduce((a, c) => a + perMonth(c.p), 0))}` : 'Add your first reminder whenever you’re ready.'}</p></div>
     ${added.length > 0 && html`<ul class="onb3-sum">${added.slice().sort((a, b) => a.date.localeCompare(b.date)).map((c) => html`<li><${Logo} r=${{ name: c.s.name, tone: c.s.tone }} size="sm" /><span class="grow"><b>${c.s.name}</b><span class="small c3">${c.p.label} · renews ${fmt(c.date)}</span></span><span class="small cb onb3-when" title="First reminder">${fmt(R.iso(R.addDays(R.parse(c.date), -7)) < R.iso(R.today()) ? R.iso(R.today()) : R.iso(R.addDays(R.parse(c.date), -7)))}</span></li>`)}</ul>`}

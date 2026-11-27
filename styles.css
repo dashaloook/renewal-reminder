@@ -580,7 +580,7 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
 .onb3-date .datefield{flex:1;max-width:220px}
 /* Step 3: you're covered */
 .onb3-done{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px}
-.onb3-duck{width:120px;height:120px;animation:onb3-pop .4s ease}
+.onb3-duck{width:128px;height:128px;border-radius:50%;object-fit:cover;animation:onb3-pop .4s ease}  /* round, as in Figma */
 .onb3-sum{list-style:none;margin:0;padding:8px;display:flex;flex-direction:column;gap:2px;background:var(--surface);border-radius:16px;box-shadow:var(--shadow-s)}
 .onb3-sum li{display:flex;align-items:center;gap:12px;padding:8px}
 .onb3-sum li .grow{display:flex;flex-direction:column;min-width:0}
@@ -593,7 +593,7 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
   .onb3-body .h1.big{font-size:28px;line-height:34px}
   .onb3-opts{padding-left:13px}
   .onb3-stat-n{font-size:26px}
-  .onb3-duck{width:92px;height:92px}
+  .onb3-duck{width:104px;height:104px}
   .onb3-body.s3{gap:12px;padding-top:4px}
   .onb3-sum li{padding:6px 8px}
   .onb3-flow li{padding:10px 6px}
