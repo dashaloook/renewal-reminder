@@ -82,19 +82,19 @@ def test_onboarding_adds_picked_services(page: Page, base_url, errors):
     expect(page.get_by_role("button", name="Add 1 reminder")).to_be_visible()     # only the first service is preselected
     expect(page.locator(".onb3-svc.on")).to_have_count(1)
     expect(page.locator(".onb3-svc.on")).to_contain_text("Netflix")
-    page.get_by_role("button", name=re.compile("^Disney\\+")).click()          # add Disney+
-    page.get_by_role("radiogroup", name="Disney+ plan").get_by_role("radio", name=re.compile("Premium")).click()
+    page.get_by_role("button", name=re.compile("^Telegram Premium")).click()  # add Telegram Premium
+    page.get_by_role("radiogroup", name="Telegram Premium plan").get_by_role("radio", name=re.compile("Yearly")).click()
     page.get_by_role("button", name=re.compile("^Claude")).click()              # add Claude
     page.get_by_role("radiogroup", name="Claude plan").get_by_role("radio", name=re.compile("Max 5")).click()
     page.get_by_role("button", name="Add 3 reminders").click()
     expect(page.get_by_role("heading", name="You’re covered 🎉")).to_be_visible()
-    for text in ("Netflix", "Disney+", "Premium", "Claude", "Max 5"):
+    for text in ("Netflix", "Telegram Premium", "Yearly", "Claude", "Max 5"):
         expect(page.locator(".onb3-sum")).to_contain_text(text)
     page.get_by_role("button", name="Go to my dashboard").click()
     expect(page).to_have_url(re.compile(r"#/dashboard$"))
     page.goto(base_url + "/#/reminders")
-    expect(find(page, "Disney+")).to_contain_text("€13.99")
-    expect(find(page, "Claude")).to_contain_text("€90.00")
+    expect(find(page, "Telegram Premium")).to_contain_text("$35.99")      # dollars by default
+    expect(find(page, "Claude")).to_contain_text("$100.00")
 
 
 def test_claude_is_listed_right_after_chatgpt(page: Page, base_url, errors):
@@ -316,10 +316,10 @@ def test_famous_services_show_their_logo(page: Page, base_url, errors):
     page.get_by_role("button", name="Try the demo without signing up").click()
     page.get_by_role("button", name="Let’s find yours").click()
     logos = page.locator(".onb3-svc .brand-logo img")
-    expect(logos).to_have_count(8)                                   # all but Disney+
+    expect(logos).to_have_count(13)                                  # all but the Ukrainian TV services
     page.wait_for_function("[...document.querySelectorAll('.brand-logo img')].every(i => i.complete && i.naturalWidth > 0)")
-    disney = page.locator(".onb3-svc", has_text="Disney+").locator(".logo")
-    expect(disney).to_have_text("D")                                 # no free logo: keeps its letter
+    expect(page.locator(".onb3-svc", has_text="Megogo").locator(".topic-logo svg")).to_have_count(1)  # no free logo: TV icon
+    expect(page.locator(".onb3-svc", has_text="Disney+")).to_have_count(0)   # not available in Ukraine
     start_demo(page, base_url)
     page.goto(base_url + "/#/reminders")
     page.get_by_role("radio", name="List view").click()
@@ -385,7 +385,23 @@ def test_search_suggests_your_reminders_and_shows_results(page: Page, base_url, 
     expect(page.get_by_role("dialog", name="Netflix")).to_be_visible()
     page.get_by_role("button", name="Close details").click()
     expect(page.get_by_role("listbox", name="Suggestions")).to_have_count(0)
-    page.locator("#ls").fill("Disney")
-    expect(page.get_by_role("listbox", name="Suggestions")).to_contain_text("Add Disney+")
+    page.locator("#ls").fill("Megogo")
+    expect(page.get_by_role("listbox", name="Suggestions")).to_contain_text("Add Megogo")
     page.locator(".card.empty").get_by_role("button", name="Clear search").click()
     expect(page.locator(".cal")).to_have_count(1)                               # calendar is back
+
+
+def test_currency_defaults_to_dollars_and_can_switch(page: Page, base_url, errors):
+    page.goto(base_url + "/")
+    page.get_by_role("button", name="Try the demo without signing up").click()
+    page.get_by_role("button", name="Let’s find yours").click()
+    cur = page.get_by_role("radiogroup", name="Currency")
+    expect(cur.get_by_role("radio", name="US dollar")).to_have_attribute("aria-checked", "true")
+    cur.get_by_role("radio", name="Hryvnia").click()
+    expect(cur.get_by_role("radio", name="Hryvnia")).to_have_attribute("aria-checked", "true")
+    page.get_by_role("button", name="Add 1 reminder").click()
+    page.get_by_role("button", name="Go to my dashboard").click()
+    page.goto(base_url + "/#/reminders")
+    expect(find(page, "Netflix").first).to_contain_text("₴")
+    page.goto(base_url + "/#/new")
+    expect(page.locator("label", has_text="UAH")).to_have_count(1)    # amount field shows the currency

@@ -32,21 +32,34 @@
   const REASONS = ['No access to account', 'Need to compare prices', 'Need to discuss with someone', 'Other'];
   const TONES = ['rose', 'sky', 'lavender', 'yellow', 'peach'];
 
+  // Services people in Ukraine and elsewhere actually pay for (Disney+ and the Amazon Prime membership
+  // aren't offered in Ukraine). prices = typical list prices per currency — estimates, editable.
+  // group = how the onboarding list is organised; the first 6 are the Quick start chips.
+  const P = (usd, eur, uah) => ({ USD: usd, EUR: eur, UAH: uah });
   const TEMPLATES = [
-    { name: 'Netflix', url: 'https://www.netflix.com/cancelplan', category: 'subscription', amount: 15.49, cycle: 'monthly', tone: 'rose' },
-    { name: 'Spotify Family', url: 'https://www.spotify.com/account/subscription/', category: 'subscription', amount: 17.99, cycle: 'monthly', tone: 'yellow' },
-    { name: 'Disney+', url: 'https://www.disneyplus.com/account', category: 'subscription', amount: 9.99, cycle: 'monthly', tone: 'lavender' },
-    { name: 'iCloud+', url: 'https://support.apple.com/HT207594', category: 'subscription', amount: 2.99, cycle: 'monthly', tone: 'sky' },
-    { name: 'YouTube Premium', url: 'https://www.youtube.com/paid_memberships', category: 'subscription', amount: 11.99, cycle: 'monthly', tone: 'rose' },
-    { name: 'ChatGPT Plus', url: 'https://help.openai.com/en/articles/7232927', category: 'subscription', amount: 20, cycle: 'monthly', tone: 'sky' },
-    { name: 'Claude', url: 'https://claude.ai/settings/billing', category: 'subscription', amount: 18, cycle: 'monthly', tone: 'peach' },
-    { name: 'Adobe Creative Cloud', url: 'https://account.adobe.com/plans', category: 'subscription', amount: 24.19, cycle: 'monthly', tone: 'peach' },
-    { name: 'Amazon Prime', url: 'https://www.amazon.com/gp/primecentral', category: 'subscription', amount: 8.99, cycle: 'monthly', tone: 'yellow' },
-    { name: 'Gym membership', category: 'payment', amount: 29, cycle: 'monthly', tone: 'yellow' },
-    { name: 'Home internet', category: 'payment', amount: 14, cycle: 'monthly', tone: 'sky' },
-    { name: 'Car liability insurance', category: 'insurance', amount: 186, cycle: 'yearly', tone: 'lavender' },
-    { name: 'Tax return', category: 'document', amount: 0, cycle: 'yearly', tone: 'yellow' },
+    { name: 'Netflix', group: 'Video & music', url: 'https://www.netflix.com/cancelplan', category: 'subscription', cycle: 'monthly', tone: 'rose', prices: P(17.99, 13.99, 279) },
+    { name: 'YouTube Premium', group: 'Video & music', url: 'https://www.youtube.com/paid_memberships', category: 'subscription', cycle: 'monthly', tone: 'rose', prices: P(13.99, 12.99, 99) },
+    { name: 'Spotify', group: 'Video & music', url: 'https://www.spotify.com/account/subscription/', category: 'subscription', cycle: 'monthly', tone: 'yellow', prices: P(11.99, 10.99, 169) },
+    { name: 'ChatGPT Plus', group: 'AI', url: 'https://help.openai.com/en/articles/7232927', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(20, 23, 849) },
+    { name: 'Telegram Premium', group: 'Social', url: 'https://telegram.org/faq_premium', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(4.99, 4.99, 209) },
+    { name: 'iCloud+', group: 'Cloud & tools', url: 'https://support.apple.com/HT207594', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(2.99, 2.99, 109) },
+    { name: 'Megogo', group: 'Video & music', url: 'https://megogo.net/ua/subscriptions', category: 'subscription', cycle: 'monthly', tone: 'lavender', prices: P(2.99, 2.99, 99) },
+    { name: 'Kyivstar TV', group: 'Video & music', url: 'https://tv.kyivstar.ua', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(2.49, 2.29, 99) },
+    { name: 'Sweet.tv', group: 'Video & music', url: 'https://sweet.tv', category: 'subscription', cycle: 'monthly', tone: 'peach', prices: P(1.49, 1.39, 49) },
+    { name: 'Prime Video', group: 'Video & music', url: 'https://www.primevideo.com/settings', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(8.99, 4.99, 215) },
+    { name: 'Claude', group: 'AI', url: 'https://claude.ai/settings/billing', category: 'subscription', cycle: 'monthly', tone: 'peach', prices: P(20, 18, 829) },
+    { name: 'Meta Verified', group: 'Social', url: 'https://accountscenter.meta.com/meta_verified', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(14.99, 13.99, 619) },
+    { name: 'X Premium', group: 'Social', url: 'https://x.com/settings/manage_subscriptions', category: 'subscription', cycle: 'monthly', tone: 'lavender', prices: P(8, 8, 339) },
+    { name: 'Snapchat+', group: 'Social', url: 'https://accounts.snapchat.com', category: 'subscription', cycle: 'monthly', tone: 'yellow', prices: P(3.99, 3.99, 169) },
+    { name: 'Google One', group: 'Cloud & tools', url: 'https://one.google.com/settings', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(1.99, 1.99, 79) },
+    { name: 'Adobe Creative Cloud', group: 'Cloud & tools', url: 'https://account.adobe.com/plans', category: 'subscription', cycle: 'monthly', tone: 'peach', prices: P(19.99, 11.99, 829) },
+    { name: 'Gym membership', category: 'payment', cycle: 'monthly', tone: 'yellow', prices: P(40, 29, 900) },
+    { name: 'Home internet', category: 'payment', cycle: 'monthly', tone: 'sky', prices: P(50, 25, 250) },
+    { name: 'Car liability insurance', category: 'insurance', cycle: 'yearly', tone: 'lavender', prices: P(1200, 186, 1800) },
+    { name: 'Tax return', category: 'document', cycle: 'yearly', tone: 'yellow', prices: P(0, 0, 0) },
   ];
+  // Price of a template in the account's currency (US dollars by default).
+  const priceOf = (t, cur) => (t && t.prices ? (t.prices[cur] ?? t.prices.USD) : (t && t.amount) || 0);
 
   // offset = days from today to next charge / expiry
   const RAW = [
@@ -125,5 +138,5 @@
     });
   }
 
-  window.RR = { DAY, today, iso, parse, addDays, addMonths, daysUntil, off, USER, CATEGORIES, CYCLES, REASONS, TONES, TEMPLATES, seedReminders, occurrences, analytics, monthlyEq, yearly, isActive, rollForward, SEED_STATS: { onTime: 7, total: 8 } };
+  window.RR = { DAY, today, iso, parse, addDays, addMonths, daysUntil, off, USER, CATEGORIES, CYCLES, REASONS, TONES, TEMPLATES, priceOf, seedReminders, occurrences, analytics, monthlyEq, yearly, isActive, rollForward, SEED_STATS: { onTime: 7, total: 8 } };
 })();

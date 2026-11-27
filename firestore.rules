@@ -16,7 +16,9 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, delete: if isOwner(userId);
       allow create, update: if isOwner(userId)
-        && request.resource.data.keys().hasOnly(['reminders', 'stats', 'onboarded', 'notif', 'bannerDismissed', 'updatedAt', 'push'])
+        && request.resource.data.keys().hasOnly(['reminders', 'stats', 'onboarded', 'notif', 'bannerDismissed', 'updatedAt', 'push', 'currency'])
+        // currency = how amounts are shown and emailed (no conversion)
+        && (!('currency' in request.resource.data) || request.resource.data.currency in ['USD', 'EUR', 'UAH'])
         && (!('reminders' in request.resource.data) || (request.resource.data.reminders is list && request.resource.data.reminders.size() <= 500))
         // push = this user's browser push subscriptions (one per device, at most 5)
         && (!('push' in request.resource.data) || (request.resource.data.push is list && request.resource.data.push.size() <= 5));
