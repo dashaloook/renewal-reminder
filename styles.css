@@ -665,3 +665,7 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
 .cur-switch.compact .seg button{padding:4px 8px;font-size:13px;min-height:30px}
 .onb3-group{display:flex;flex-direction:column;gap:8px}
 .onb3-gh{margin:6px 0 0;font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3)}
+
+/* amount with its own currency */
+.amount-row{display:flex;gap:8px;align-items:stretch}
+.amount-row .cur-select{width:auto;flex:none;padding-right:28px}

@@ -9,7 +9,7 @@ const R = window.RR;
 const CURRENCIES = [['USD', '$', 'US dollar'], ['EUR', '€', 'Euro'], ['UAH', '₴', 'Hryvnia']];
 let CUR = 'USD';
 const curSym = (c = CUR) => (CURRENCIES.find((x) => x[0] === c) || CURRENCIES[0])[1];
-const money = (n) => curSym() + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (n, cur) => curSym(cur) + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Notification wording (same rules as the server's daily job, api/daily_reminders.py).
 const notifCopy = (r, followUp) => {
   const n = R.daysUntil(r.date); const name = r.name;
@@ -17,7 +17,7 @@ const notifCopy = (r, followUp) => {
   const when = n <= 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`;
   if (r.category === 'document') return { title: `${name} expires ${when}`, body: n <= 0 ? 'Check what you need to renew it.' : 'Start renewing it now, so it doesn’t run out.' };
   const per = { weekly: ' a week', monthly: ' a month', yearly: ' a year' }[r.cycle] || '';
-  const ask = Number(r.amount) > 0 ? `Still worth ${money(r.amount)}${per}?` : 'Still need it?';
+  const ask = Number(r.amount) > 0 ? `Still worth ${rMoney(r)}${per}?` : 'Still need it?';
   return { title: `${name} renews ${when}`, body: `${ask} ${n <= 0 ? 'Decide before you’re charged.' : n === 1 ? 'Decide before tomorrow’s charge.' : 'Take a moment to decide.'}` };
 };
 const remindTxt = (n) => (n === 0 ? 'on the day' : `${n} ${n === 1 ? 'day' : 'days'} before`);
@@ -37,7 +37,8 @@ const load = () => { try { const s = JSON.parse(localStorage.getItem(LS_KEY)); i
 const save = (s) => { try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch (e) { /* storage unavailable: keep in memory */ } };
 const freshState = () => ({ reminders: R.seedReminders(), notif: false, bannerDismissed: false, stats: { ...R.SEED_STATS }, onboarded: false, authed: false, account: 'demo', user: null, loadFail: false });
 const uid = () => Math.random().toString(36).slice(2, 9);
-const amountLine = (r) => r.amount ? `${money(r.amount)}${cyc(r.cycle).per ? ' / ' + cyc(r.cycle).per : ''}` : 'No cost';
+const rMoney = (r) => money(r.amount, R.curOf(r)); // an amount in the reminder's own currency
+const amountLine = (r) => r.amount ? `${rMoney(r)}${cyc(r.cycle).per ? ' / ' + cyc(r.cycle).per : ''}` : 'No cost';
 
 // ---------- icons (Lucide paths) ----------
 const P = {
@@ -241,7 +242,7 @@ function App() {
 
   Object.assign(R.USER, { photo: '' }, state.user || DEMO_USER);
   R.CLOUD_ACCOUNT = isCloud(state.account);
-  CUR = CURRENCIES.some((c) => c[0] === state.currency) ? state.currency : 'USD'; window.RR_CUR = CUR;
+  CUR = CURRENCIES.some((c) => c[0] === state.currency) ? state.currency : 'USD'; window.RR_CUR = CUR; R.setMain(CUR);
   const reminders = QS === 'empty' ? [] : state.reminders;
   // Notifications count as "on" only if the browser really allows them on this device.
   const pushApi = window.RRPush;
@@ -446,17 +447,16 @@ function Shell({ ctx, page, children }) {
 // $ / € / ₴ — one setting per account, saved with the profile.
 function CurrencySwitch({ ctx, compact }) {
   // Switching converts every saved amount at today's rate (undo restores the old amounts).
+  // Main currency = what totals are shown in. Each reminder keeps its own currency; old ones
+  // that had none get the previous main currency first, so their amounts never change meaning.
   const pick = (code) => {
     const from = CUR; if (code === from) return;
-    const before = { currency: ctx.state.currency, reminders: ctx.state.reminders };
-    ctx.update((s) => ({ currency: code, reminders: s.reminders.map((r) => (Number(r.amount) ? { ...r, amount: R.convert(r.amount, from, code) } : r)) }));
-    const n = ctx.state.reminders.filter((r) => Number(r.amount)).length;
-    if (n) ctx.showToast(`Amounts converted to ${curSym(code)} ${code}`, `${n} reminder${n === 1 ? '' : 's'} at today’s rate. You can undo for 6 seconds.`, before);
+    ctx.update((s) => ({ currency: code, reminders: s.reminders.map((r) => (r.currency ? r : { ...r, currency: from })) }));
   };
   const r = R.RATES; const two = (x) => x.toFixed(2);
   const rate = CUR === 'UAH' ? `$1 = ₴${two(r.USD)} · €1 = ₴${two(r.EUR)}` : CUR === 'EUR' ? `€1 = $${two(r.EUR / r.USD)} · ₴${two(r.EUR)}` : `$1 = €${two(r.USD / r.EUR)} · ₴${two(r.USD)}`;
   const lid = compact ? 'cur-lm' : 'cur-l';
-  return html`<div class=${'cur-switch' + (compact ? ' compact' : '')}><span class="small c2" id=${lid}>Currency</span>
+  return html`<div class=${'cur-switch' + (compact ? ' compact' : '')}><span class="small c2" id=${lid}>Main currency</span>
     <div class="seg" role="radiogroup" aria-labelledby=${lid}>${CURRENCIES.map(([code, sym, label]) => html`<button type="button" role="radio" aria-checked=${CUR === code} aria-label=${label} title=${label} onClick=${() => pick(code)}>${sym} ${code}</button>`)}</div>
     <span class="small c3 cur-rate" title=${r.src === 'NBU' ? 'Official rate of the National Bank of Ukraine' : r.src === 'built-in' ? 'Offline: approximate rate' : 'Exchange rate from ' + r.src}>${rate} · ${r.src === 'NBU' ? 'NBU' : r.src === 'built-in' ? 'approx.' : 'market'}, ${fmt(r.date, { day: 'numeric', month: 'short' })}</span></div>`;
 }
@@ -567,7 +567,7 @@ function Onboarding({ ctx }) {
     const have = new Set(ctx.state.reminders.map((r) => r.name.toLowerCase()));
     const fresh = chosen.filter((c) => !have.has(c.s.name.toLowerCase()));
     const tpl = (c) => R.TEMPLATES.find((t) => t.name === (c.s.tpl || c.s.name)) || {};
-    const recs = fresh.map((c) => ({ id: 'ob-' + uid(), name: c.s.name, category: 'subscription', amount: c.p.amount, cycle: c.p.cycle, date: c.date, remind: 7, channel: defaultChannel(), link: tpl(c).url || '',
+    const recs = fresh.map((c) => ({ id: 'ob-' + uid(), name: c.s.name, category: 'subscription', amount: c.p.amount, currency: CUR, cycle: c.p.cycle, date: c.date, remind: 7, channel: defaultChannel(), link: tpl(c).url || '',
       note: c.s.plans.length > 1 ? `${c.p.label} plan` : '', status: 'active', reason: '', followUp: '', tone: onbTone(c.s), history: [{ type: 'created', date: R.iso(R.today()), text: 'Added during setup' }] }));
     if (recs.length) ctx.update((st) => ({ reminders: [...st.reminders, ...recs] }));
     setMade(recs.map((r) => r.id)); setAdded(chosen); setStep(3);
@@ -717,7 +717,8 @@ function Dashboard({ ctx }) {
   const { state } = ctx; const loading = useLoading('dash');
   const [chartErr, setChartErr] = useState((QS === 'error' || ctx.state.loadFail || !navigator.onLine)); const [retrying, setRetrying] = useState(false);
   const list = state.reminders;
-  const a = useMemo(() => R.analytics(list), [list]);
+  const a = useMemo(() => R.analytics(list), [list, CUR, R.RATES.USD, R.RATES.EUR]); // totals in the main currency
+  const mixedNote = new Set(list.filter((r) => Number(r.amount)).map(R.curOf)).size > 1 ? ` · in ${CUR} at today’s rate` : '';
   const unfinished = list.filter((r) => r.status === 'unfinished').sort((x, y) => x.date.localeCompare(y.date));
   const upcoming = list.filter((r) => r.status !== 'cancelled' && R.daysUntil(r.date) >= 0).sort((x, y) => x.date.localeCompare(y.date));
   const next = upcoming[0];
@@ -736,7 +737,7 @@ function Dashboard({ ctx }) {
         : html`<div class="row gap16" style=${{ padding: 20, background: 'var(--success-subtle)', borderRadius: 12 }}><${Icon} n="circle-check" c="" style=${{ color: 'var(--success)' }} /><div><b>All decided.${next ? ` Next renewal ${R.daysUntil(next.date) === 0 ? 'today' : R.daysUntil(next.date) === 1 ? 'tomorrow' : `in ${R.daysUntil(next.date)} days`}.` : ''}</b><div class="c2">Nothing is waiting for you. We’ll bring the next one here when it’s due.</div></div></div>`}
     </section>
     <section class="kpis" aria-label="Key numbers">
-      ${[['This month', money(a.month), 'Monthly equivalent of active items'], ['Per year (projection)', money(a.year), 'Incl. one-time costs in the next 12 months'], ['Next 30 days', `${a.next30Count} charge${a.next30Count === 1 ? '' : 's'}`, `${money(a.next30Sum)} in total`], ['Decided on time', state.stats.total ? `${state.stats.onTime} of ${state.stats.total}` : '—', state.stats.total ? 'Decisions made before the charge date' : 'Fills in after your first decision']].map(([l, v, c]) => html`<div class="card kpi"><div class="c2">${l}</div><div class="v">${v}</div><div class="small c3">${c}</div></div>`)}
+      ${[['This month', money(a.month), 'Monthly equivalent of active items' + mixedNote], ['Per year (projection)', money(a.year), 'Incl. one-time costs in the next 12 months'], ['Next 30 days', `${a.next30Count} charge${a.next30Count === 1 ? '' : 's'}`, `${money(a.next30Sum)} in total`], ['Decided on time', state.stats.total ? `${state.stats.onTime} of ${state.stats.total}` : '—', state.stats.total ? 'Decisions made before the charge date' : 'Fills in after your first decision']].map(([l, v, c]) => html`<div class="card kpi"><div class="c2">${l}</div><div class="v">${v}</div><div class="small c3">${c}</div></div>`)}
     </section>
     <section class="charts">
       <div class="card pad24 col gap16 chart-card"><div><h2 class="h3">Spend by category</h2><span class="small c3">Projected per year · tap a category to see it in the calendar</span></div><${CatBars} data=${a.byCat} /></div>
@@ -783,7 +784,7 @@ function Row({ r, ctx, isNew }) {
   const open = () => { const sel = window.getSelection && String(window.getSelection()); if (!sel || !sel.trim()) ctx.openDrawer(r.id); };
   return html`<div class=${'rrow' + (isNew ? ' is-new' : '')} role="button" tabindex="0" onClick=${open} onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ctx.openDrawer(r.id); } }} aria-label=${`${isNew ? 'New reminder, ' : ''}${r.name}, ${amountLine(r)}, ${fmt(r.date)}, ${rel(R.daysUntil(r.date))}, ${r.status === 'unfinished' ? 'unfinished decision: ' + r.reason : r.status}${r.note ? ', note: ' + r.note : ''}`}>
     <${Logo} r=${r} /><span class="nm grow col" style=${{ gap: 2 }}><span class="nm-line"><b class="h3" style=${{ fontSize: 16 }}>${r.name}</b><span class="nm-cat">/ ${cat(r.category).one}</span></span><${NoteLine} note=${r.note} row />${r.status === 'unfinished' && html`<span class="small cb row gap4 reason-inline"><${Icon} n="hourglass" c="xs" />Postponed: ${r.reason}</span>`}${(isNew || r.status === 'kept' || r.status === 'cancelled') && html`<span class="st-inline">${isNew ? html`<span class="badge t-brand">New</span>` : html`<${StatusBadge} r=${r} />`}</span>`}</span>
-    <span class="amt"><b class="h3" style=${{ fontSize: 16, display: 'block' }}>${r.amount ? money(r.amount) : '—'}</b><span class="small c3">${r.category === 'document' ? 'Expires' : cyc(r.cycle).label}</span><span class="mob-badge"><${UrgBadge} r=${r} /></span></span>
+    <span class="amt"><b class="h3" style=${{ fontSize: 16, display: 'block' }}>${r.amount ? rMoney(r) : '—'}</b><span class="small c3">${r.category === 'document' ? 'Expires' : cyc(r.cycle).label}</span><span class="mob-badge"><${UrgBadge} r=${r} /></span></span>
     <span class="when"><span class="date">${fmt(r.date)}</span><${UrgBadge} r=${r} /></span><span class="st">${isNew ? html`<span class="badge t-brand">New</span>` : html`<${StatusBadge} r=${r} />`}${r.status === 'unfinished' && r.reason && html`<span class="st-reason">Postponed: ${r.reason}</span>`}</span><span class="chev c3"><${Icon} n="chevron-right" /></span>
   </div>`;
 }
@@ -815,7 +816,7 @@ function Drawer({ r, ctx, onClose }) {
         <span class="small c3">${r.link ? `Opens ${hostOf(r.link)} in a new tab. ` : ''}Renewal Reminder never cancels anything for you — you do it on the service, then tell us here.</span></div>`
       : html`<div class="reason"><${Icon} n="x" /><div><b>You cancelled this.</b><div class="small c2">It no longer counts in your totals.</div></div></div>`}
       <dl class="card facts" style=${{ margin: 0 }}>
-        <div><dt>Amount</dt><dd>${amountLine(r)}</dd></div>${r.amount > 0 && r.cycle !== 'one-time' && html`<div><dt>Per year</dt><dd>${money(R.monthlyEq({ ...r, status: 'active' }) * 12)}</dd></div>`}
+        <div><dt>Amount</dt><dd>${amountLine(r)}</dd></div>${r.amount > 0 && r.cycle !== 'one-time' && html`<div><dt>Per year</dt><dd>${money(R.monthlyEq({ ...r, status: 'active' }, true) * 12, R.curOf(r))}</dd></div>`}
         <div><dt>${r.category === 'document' ? 'Expires' : 'Next charge'}</dt><dd>${fmt(r.date, { day: 'numeric', month: 'long', year: 'numeric' })} (${rel(n).toLowerCase()})</dd></div>
         <div><dt>Remind me</dt><dd>${remindTxt(r.remind)} · ${r.channel === 'email' ? 'Email' : 'Browser'}</dd></div>
         ${r.note && r.note.trim() ? html`<div class="note-row"><dt>Note</dt><dd>${r.note.trim()}</dd></div>` : html`<div><dt>Note</dt><dd>—</dd></div>`}</dl>
@@ -898,7 +899,7 @@ function DecideLater({ r, ctx, onClose }) {
   };
   return html`<div class="scrim" onClick=${close}></div>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dl-h" ref=${ref}>
-    <div class="row gap12"><div class="grow"><h2 class="h2" id="dl-h">Decide later</h2><span class="c2">${r.name} · ${r.amount ? money(r.amount) + ' · ' : ''}renews ${fmt(r.date)} (${rel(n0).toLowerCase()})</span>${passed && html`<span class="msg warn" style=${{ display: 'flex', marginTop: 6 }}><${Icon} n="info" c="xs" />${n0 === 0 ? 'This charge is today' : 'This charge date has passed'}, so it may already have gone through. ${nextCharge ? `Pick a reminder before the next one on ${fmt(nextCharge)}.` : 'Pick when to remind you.'}</span>`}</div><button class="icon-btn" aria-label="Cancel. Nothing changes." onClick=${close}><${Icon} n="x" c="s" /></button></div>
+    <div class="row gap12"><div class="grow"><h2 class="h2" id="dl-h">Decide later</h2><span class="c2">${r.name} · ${r.amount ? rMoney(r) + ' · ' : ''}renews ${fmt(r.date)} (${rel(n0).toLowerCase()})</span>${passed && html`<span class="msg warn" style=${{ display: 'flex', marginTop: 6 }}><${Icon} n="info" c="xs" />${n0 === 0 ? 'This charge is today' : 'This charge date has passed'}, so it may already have gone through. ${nextCharge ? `Pick a reminder before the next one on ${fmt(nextCharge)}.` : 'Pick when to remind you.'}</span>`}</div><button class="icon-btn" aria-label="Cancel. Nothing changes." onClick=${close}><${Icon} n="x" c="s" /></button></div>
     <div class="col gap12" role="radiogroup" aria-labelledby="dl-r"><b id="dl-r">What’s stopping you right now? <span class="c3" style=${{ fontWeight: 400 }}>(optional)</span></b><div class="row wrap">${R.REASONS.map((x) => html`<button class="chip" role="radio" aria-checked=${reason === x} data-autofocus=${x === R.REASONS[0] ? true : undefined} onClick=${() => { setReason(x); setErr(''); }}>${reason === x && html`<${Icon} n="check" c="s" />`}${x}</button>`)}</div>
       ${err && html`<span class="msg err"><${Icon} n="info" c="xs" />${err}</span>`}
       <label class="sr-only" for="dl-note">Note</label><${Clear} show=${!!note} label="Clear note" target="dl-note" onClear=${() => setNote('')}><${GrowText} id="dl-note" maxlength=${NOTE_MAX} placeholder=${reason === 'Other' ? 'What’s stopping you? (optional)' : 'Note for future you, e.g. “Ask Sam for the password” (optional)'} value=${note} onInput=${(e) => setNote(e.target.value)} /><//></div>
@@ -1013,8 +1014,8 @@ function DateField({ id, value, onChange, min, max, className = '', height, desc
 
 function CreateForm({ ctx, editId }) {
   const editing = editId && ctx.state.reminders.find((r) => r.id === editId);
-  const blank = { name: '', category: 'subscription', amount: '', cycle: 'monthly', date: '', remind: 7, channel: defaultChannel(), note: '', link: '', tone: 'lavender' };
-  const [f, setF] = useState(editing ? { ...editing, amount: editing.amount ? String(editing.amount) : '' } : blank);
+  const blank = { name: '', category: 'subscription', amount: '', currency: CUR, cycle: 'monthly', date: '', remind: 7, channel: defaultChannel(), note: '', link: '', tone: 'lavender' };
+  const [f, setF] = useState(editing ? { ...editing, currency: R.curOf(editing), amount: editing.amount ? String(editing.amount) : '' } : blank);
   const [dirty, setDirty] = useState(false); const [errors, setErrors] = useState({}); const [saving, setSaving] = useState(false); const [done, setDone] = useState(null);
   const [q, setQ] = useState(''); const [open, setOpen] = useState(false); const [hi, setHi] = useState(0); const [tpl, setTpl] = useState(null);
   const loading = useLoading('form');
@@ -1029,7 +1030,7 @@ function CreateForm({ ctx, editId }) {
   const rank = (n, k) => { n = n.toLowerCase(); if (n.startsWith(k)) return 0; if (n.split(/[\s+]+/).some((w) => w.startsWith(k))) return 1; return n.includes(k) ? 2 : 9; };
   const results = q.trim() ? R.TEMPLATES.map((t) => [t, rank(t.name, q.trim().toLowerCase())]).filter(([, r]) => r < 9).sort((a, b) => a[1] - b[1]).map(([t]) => t) : R.TEMPLATES.filter((t) => t.category === 'subscription').slice(0, 8);
   useEffect(() => { try { const n = loading ? null : sessionStorage.getItem('rr-tpl'); if (n && !editId) { sessionStorage.removeItem('rr-tpl'); const t = R.TEMPLATES.find((x) => x.name === n); if (t) applyTpl(t); } } catch (e) { /* ok */ } }, [loading]);
-  const applyTpl = (t) => { setF((x) => ({ ...x, link: t.url || x.link || '', name: t.name, category: t.category, amount: R.priceOf(t, CUR) ? String(R.priceOf(t, CUR)) : '', cycle: t.cycle, tone: t.tone })); setTpl(t.name); setQ(''); setOpen(false); setDirty(true); setErrors({}); setTimeout(() => { const el = document.getElementById(f.date ? 'f-amount' : 'f-date'); if (el) el.focus(); }, 0); };
+  const applyTpl = (t) => { setF((x) => ({ ...x, link: t.url || x.link || '', name: t.name, category: t.category, amount: R.priceOf(t, x.currency) ? String(R.priceOf(t, x.currency)) : '', cycle: t.cycle, tone: t.tone })); setTpl(t.name); setQ(''); setOpen(false); setDirty(true); setErrors({}); setTimeout(() => { const el = document.getElementById(f.date ? 'f-amount' : 'f-date'); if (el) el.focus(); }, 0); };
   const manual = () => { setF((x) => ({ ...blank, name: q.trim() })); setTpl(null); setOpen(false); setQ(''); setTimeout(() => document.getElementById('f-name').focus(), 0); };
   const cancel = useCallback(() => { const leave = () => go(editing ? 'reminders' : 'dashboard'); if (dirty && !done) ctx.confirm({ title: 'Discard this reminder?', body: 'You’ve started filling it in. If you leave now, these changes won’t be saved.', ok: 'Discard', onOk: leave }); else leave(); }, [dirty, done]);
   useEffect(() => { const h = () => cancel(); addEventListener('rr-cancel', h); return () => removeEventListener('rr-cancel', h); }, [cancel]);
@@ -1071,7 +1072,9 @@ function CreateForm({ ctx, editId }) {
   const dup = typed && ctx.state.reminders.find((x) => x.status !== 'cancelled' && x.name.trim().toLowerCase() === typed && (!editing || x.id !== editing.id));
   const dupName = dup ? dup.name : '';
   const tplData = tpl && R.TEMPLATES.find((t) => t.name === tpl);
-  const priceFromTpl = !!(tplData && R.priceOf(tplData, CUR) && String(R.priceOf(tplData, CUR)) === String(f.amount));
+  const priceFromTpl = !!(tplData && R.priceOf(tplData, f.currency) && String(R.priceOf(tplData, f.currency)) === String(f.amount));
+  // Changing the currency of a typical price converts it; a price the person typed stays as typed.
+  const setCur = (c) => { setDirty(true); setF((x) => ({ ...x, currency: c, amount: priceFromTpl ? String(R.priceOf(tplData, c)) : x.amount })); };
   return html`<div class="col gap4"><span class="small c3">My reminders › ${editing ? 'Edit' : 'New'}</span><div class="page-head"><h1 class="h1">${editing ? `Edit ${editing.name}` : 'Add a reminder'}</h1><${Btn} v="ghost" sm icon="x" class="ph-add" onClick=${cancel}>Cancel<//></div><p class="body-l c2" style=${{ margin: 0 }}>Pick a service to prefill, or enter it yourself. Takes about 30 seconds.</p></div>
   <form class="form-layout" onSubmit=${submit} noValidate>
     <div class="card col gap24" style=${{ padding: 32, borderRadius: 16 }}>
@@ -1090,7 +1093,7 @@ function CreateForm({ ctx, editId }) {
         <div class="field"><label for="f-name">Name <span aria-hidden="true">*</span></label><${Clear} show=${!!f.name} label="Clear name" target="f-name" onClear=${() => set('name', '')}><${GrowText} oneLine id="f-name" className=${errors.name ? 'err' : ''} maxlength="80" value=${f.name} required aria-invalid=${!!errors.name} aria-describedby=${errors.name ? 'e-name' : undefined} onInput=${(e) => set('name', e.target.value)} /><//>${errors.name && html`<span class="msg err" id="e-name"><${Icon} n="info" c="xs" />${errors.name}</span>`}${!errors.name && dupName && html`<span class="msg warn"><${Icon} n="info" c="xs" />You already have ${dupName}. Add it again only for a separate account or plan.</span>`}</div>
         <div class="field"><label for="f-cat">Category</label><select id="f-cat" class="input" value=${f.category} onChange=${(e) => set('category', e.target.value)}>${R.CATEGORIES.map((c) => html`<option value=${c.id}>${c.one}</option>`)}</select></div>
       </div>
-      ${!isDoc && html`<div class="field"><label for="f-amount">Amount (optional) <span class="c3" style=${{ fontWeight: 400 }}>· ${CUR}</span></label><div class="input-wrap"><span style=${{ position: 'absolute', left: 16, top: 13 }} class="c2 body-l" aria-hidden="true">${curSym()}</span><input id="f-amount" inputmode="decimal" class=${'input' + (errors.amount || amountBad ? ' err' : '')} style=${{ paddingLeft: 32 }} placeholder="0.00" value=${f.amount} aria-invalid=${!!(errors.amount || amountBad)} aria-describedby="e-amount" onInput=${(e) => set('amount', e.target.value)} /></div>
+      ${!isDoc && html`<div class="field"><label for="f-amount">Amount (optional)</label><div class="amount-row"><select class="input cur-select" aria-label="Currency" value=${f.currency} onChange=${(e) => setCur(e.target.value)}>${CURRENCIES.map(([c, sym]) => html`<option value=${c} key=${c}>${sym} ${c}</option>`)}</select><div class="input-wrap grow"><span style=${{ position: 'absolute', left: 16, top: 13 }} class="c2 body-l" aria-hidden="true">${curSym(f.currency)}</span><input id="f-amount" inputmode="decimal" class=${'input' + (errors.amount || amountBad ? ' err' : '')} style=${{ paddingLeft: 32 }} placeholder="0.00" value=${f.amount} aria-invalid=${!!(errors.amount || amountBad)} aria-describedby="e-amount" onInput=${(e) => set('amount', e.target.value)} /></div></div>
         ${errors.amount || amountBad ? html`<span class="msg err" id="e-amount"><${Icon} n="info" c="xs" />Use numbers only, like 9.99.</span>` : priceFromTpl ? html`<span class="msg hint" id="e-amount">Typical ${tpl} price. Change it if yours differs.</span>` : null}</div>
       <div class="field"><span class="flabel" id="cy-l">Billing cycle</span><div class="seg" role="radiogroup" aria-labelledby="cy-l">${R.CYCLES.map((c) => html`<button type="button" role="radio" aria-checked=${f.cycle === c.id} onClick=${() => set('cycle', c.id)}>${c.label}</button>`)}</div></div>`}
       <div class="field"><label for="f-date">${isDoc ? 'Expiry date' : 'Next charge date'} <span aria-hidden="true">*</span></label><${DateField} id="f-date" className=${errors.date ? 'err' : past ? 'warn' : ''} value=${f.date} invalid=${!!errors.date} describedBy="e-date" onChange=${(v) => set('date', v)} />
@@ -1119,8 +1122,8 @@ function CreateForm({ ctx, editId }) {
       <div class="card pad24 col gap16" style=${{ border: '2px solid var(--brand-subtle)', borderRadius: 16 }} aria-live="polite">
         <span class="row small cb"><${Icon} n="eye" c="s" />Preview · updates as you type</span>
         <div class="row gap12"><${Logo} r=${{ ...f, name: f.name || '?' }} /><div><b class="h3">${f.name || 'Your reminder'}</b><div class="small c3">${cat(f.category).one}${isDoc ? '' : ' · ' + cyc(f.cycle).label}</div></div></div>
-        <p class="body-l" style=${{ margin: 0 }}>${f.name && f.date ? (isDoc ? `${f.name} expires on ${fmt(f.date)}. ` : `${f.name} renews on ${fmt(f.date)}${f.amount && !amountBad ? `, ${money(amountNum)}` : ''}. `) + `We’ll remind you on ${fmt(remindDate)}.` : 'Add a name and date to see your reminder here.'}</p>
-        ${f.date && html`<div class="col gap12">${[['circle-check', 'Reminder set', 'Today'], ['bell', `We remind you (${f.channel === 'email' ? 'email' : 'browser'})`, fmt(remindDate)], ['calendar', `${f.name || 'It'} ${isDoc ? 'expires' : 'renews'}${f.amount && !isDoc && !amountBad ? ' · ' + money(amountNum) : ''}`, fmt(f.date)]].map(([ic, l, d]) => html`<div class="row gap12"><span class="cb"><${Icon} n=${ic} c="s" /></span><div><div>${l}</div><div class="small c3">${d}</div></div></div>`)}</div>`}
+        <p class="body-l" style=${{ margin: 0 }}>${f.name && f.date ? (isDoc ? `${f.name} expires on ${fmt(f.date)}. ` : `${f.name} renews on ${fmt(f.date)}${f.amount && !amountBad ? `, ${money(amountNum, f.currency)}` : ''}. `) + `We’ll remind you on ${fmt(remindDate)}.` : 'Add a name and date to see your reminder here.'}</p>
+        ${f.date && html`<div class="col gap12">${[['circle-check', 'Reminder set', 'Today'], ['bell', `We remind you (${f.channel === 'email' ? 'email' : 'browser'})`, fmt(remindDate)], ['calendar', `${f.name || 'It'} ${isDoc ? 'expires' : 'renews'}${f.amount && !isDoc && !amountBad ? ' · ' + money(amountNum, f.currency) : ''}`, fmt(f.date)]].map(([ic, l, d]) => html`<div class="row gap12"><span class="cb"><${Icon} n=${ic} c="s" /></span><div><div>${l}</div><div class="small c3">${d}</div></div></div>`)}</div>`}
       </div>
       ${f.channel !== 'email' && (ctx.state.notif
         ? html`<div class="card pad20 row gap12" style=${{ alignItems: 'flex-start' }}><span class="cb msg-ic"><${Icon} n="bell" c="s" /></span><div class="col" style=${{ gap: 4 }}><b>Notifications are on</b><span class="small c2">This reminder will reach you in this browser${R.CLOUD_ACCOUNT ? ' — even when the app is closed' : ''}.</span></div></div>`
@@ -1172,7 +1175,7 @@ function ListScreen({ ctx }) {
   const mine = searching ? all.filter((r) => (r.name + ' ' + (r.note || '')).toLowerCase().includes(term)).sort((a, b) => rank(a) - rank(b) || a.date.localeCompare(b.date)).slice(0, 5) : [];
   const newTpls = searching ? R.TEMPLATES.filter((t) => t.name.toLowerCase().includes(term) && !all.some((r) => r.name.toLowerCase() === t.name.toLowerCase())).slice(0, 3) : [];
   const sugs = [...mine, ...newTpls];
-  items = [...items].sort((a, b) => sort === 'amount' ? b.amount - a.amount : sort === 'name' ? a.name.localeCompare(b.name) : a.date.localeCompare(b.date));
+  items = [...items].sort((a, b) => sort === 'amount' ? R.inMain(b) - R.inMain(a) : sort === 'name' ? a.name.localeCompare(b.name) : a.date.localeCompare(b.date));
   const groups = sort !== 'date' ? [['All results', items]] : [['This week', items.filter((r) => R.daysUntil(r.date) <= 7)], ['This month', items.filter((r) => R.daysUntil(r.date) > 7 && R.daysUntil(r.date) <= 30)], ['Later', items.filter((r) => R.daysUntil(r.date) > 30)]].filter((g) => g[1].length);
   const resetF = () => { setQ(''); setCatF('all'); setStatus('all'); };
 
@@ -1185,7 +1188,7 @@ function ListScreen({ ctx }) {
   const mKey = R.iso(month).slice(0, 7);
   const inMonth = occ.filter((o) => o.iso.slice(0, 7) === mKey).sort((a, b) => a.iso.localeCompare(b.iso) || a.r.name.localeCompare(b.r.name));
   const live = (list) => list.filter((o) => o.r.status !== 'cancelled'); // cancelled items stay visible but aren't "due"
-  const monthDue = live(inMonth); const monthSum = monthDue.reduce((s, o) => s + o.r.amount, 0);
+  const monthDue = live(inMonth); const monthSum = monthDue.reduce((s, o) => s + R.inMain(o.r), 0);
   const dayItems = byDay[sel] || []; const rest = inMonth.filter((o) => o.iso !== sel);
   const nextAfter = (iso) => { const from = R.addDays(R.parse(iso), 1); const to = R.addMonths(from, 13); return items.flatMap((r) => occOf(r, from, to).map((d) => ({ r, iso: R.iso(d) }))).sort((a, b) => a.iso.localeCompare(b.iso))[0]; };
   const focusDay = (iso) => setTimeout(() => { const el = document.querySelector(`[data-day="${iso}"]`); if (el) el.focus(); }, 0);
@@ -1199,7 +1202,7 @@ function ListScreen({ ctx }) {
   const newId = ctx.added && ctx.added.phase === 'new' ? ctx.added.id : null; const newDate = newId ? ctx.added.date : null;
   useEffect(() => { if (!newId) return; setQ(''); setCatF('all'); setStatus('all'); setView('calendar'); pick(newDate, false); }, [newId]);
   const atToday = sel === todayIso && R.iso(month).slice(0, 7) === todayIso.slice(0, 7);
-  const sumLine = (list) => { const s = live(list).reduce((a, o) => a + o.r.amount, 0); return s ? ' · ' + money(s) : ''; };
+  const sumLine = (list) => { const s = live(list).reduce((a, o) => a + R.inMain(o.r), 0); return s ? ' · ' + money(s) : ''; };
   const dueLine = (list) => { const n = live(list).length; const c = list.length - n; return [n ? `${n} due${sumLine(list)}` : '', c ? `${c} cancelled` : ''].filter(Boolean).join(' · ') || 'Nothing due'; };
 
   const header = html`<div class="page-head"><div class="row gap12 wrap ph-row" style=${{ alignItems: 'baseline' }}><h1 class="h1">My reminders</h1><div class="row c2 ph-meta"><span>${all.length} <span class="on-desk">reminder${all.length === 1 ? '' : 's'}</span><span class="on-phone">all</span></span>${counts.unfinished > 0 && html`<span aria-hidden="true"> · </span><button type="button" class="badge t-brand badge-btn" aria-pressed=${status === 'unfinished'} aria-label=${`${counts.unfinished} need${counts.unfinished === 1 ? 's' : ''} a decision. Show only these`} title="Show only unfinished decisions" onClick=${() => { setQ(''); setCatF('all'); setStatus('unfinished'); }}><${Icon} n="hourglass" />${counts.unfinished} need${counts.unfinished === 1 ? 's' : ''} a decision</button>`}</div></div><${Btn} sm icon="plus" class="ph-add" onClick=${() => go('new')}>Add reminder<//></div>`;
@@ -1210,7 +1213,7 @@ function ListScreen({ ctx }) {
   const cells = [...Array(weeks * 7)].map((_, i) => {
     const d = R.addDays(gStart, i); const iso = R.iso(d); const list = byDay[iso] || [];
     const out = iso.slice(0, 7) !== mKey; const past = iso < todayIso; const isToday = iso === todayIso; const n = R.daysUntil(iso); const isNewDay = newDate === iso && list.some((o) => o.r.id === newId);
-    const label = `${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${isToday ? ', today' : ''}: ${list.length ? list.length + ' due — ' + list.map((o) => `${o.r.name}${o.r.amount ? ' ' + money(o.r.amount) : ''}${o.r.id === newId ? ', new' : ''}${o.r.status === 'unfinished' ? ', unfinished decision' : o.r.status === 'cancelled' ? ', cancelled' : ''}`).join('; ') : 'nothing due'}`;
+    const label = `${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${isToday ? ', today' : ''}: ${list.length ? list.length + ' due — ' + list.map((o) => `${o.r.name}${o.r.amount ? ' ' + rMoney(o.r) : ''}${o.r.id === newId ? ', new' : ''}${o.r.status === 'unfinished' ? ', unfinished decision' : o.r.status === 'cancelled' ? ', cancelled' : ''}`).join('; ') : 'nothing due'}`;
     const urgent = n >= 0 && n <= 2;
     return html`<button type="button" key=${iso} data-day=${iso} class=${'cal-day' + (out ? ' out' : '') + (past ? ' past' : '') + (isToday ? ' today' : '') + (iso === sel ? ' sel' : '') + (list.length ? ' has' : '')} tabindex=${iso === sel ? 0 : -1} aria-pressed=${iso === sel} aria-label=${label} onClick=${() => pick(iso)}>
       <span class="cal-top" aria-hidden="true"><span class="cal-num">${d.getDate()}</span>${isNewDay ? html`<span class="cal-tag new">New</span>` : isToday ? html`<span class="cal-tag">Today</span>` : n === 1 ? html`<span class="cal-tag soft">Tomorrow</span>` : ''}</span>
@@ -1250,7 +1253,7 @@ function ListScreen({ ctx }) {
           onInput=${(e) => { setQ(e.target.value); setSugOpen(true); }} onClick=${() => setSugOpen(true)} onBlur=${() => setTimeout(() => setSugOpen(false), 150)} onKeyDown=${(e) => { if (e.key === 'Escape') setSugOpen(false); if (e.key === 'Enter') { e.preventDefault(); setSugOpen(false); e.target.blur(); } }} /><//><span class="c3" style=${{ position: 'absolute', left: 13, top: 12 }}><${Icon} n="search" /></span>
           ${sugOpen && sugs.length > 0 && html`<div class="listbox" id="ls-sug" role="listbox" aria-label="Suggestions">
             ${mine.length > 0 && html`<div class="lb-h" aria-hidden="true">Your reminders</div>`}
-            ${mine.map((r) => html`<div class="option" role="option" aria-selected="false" key=${r.id} onMouseDown=${(e) => { e.preventDefault(); setSugOpen(false); ctx.openDrawer(r.id); }}><${Logo} r=${r} size="sm" /><span class="grow" style=${{ minWidth: 0 }}><b>${r.name}</b><span class="small c3" style=${{ display: 'block' }}>${r.amount ? money(r.amount) + ' · ' : ''}${r.status === 'cancelled' ? 'cancelled' : (r.category === 'document' ? 'expires ' : 'renews ') + fmt(r.date)}</span></span><${Icon} n="chevron-right" c="s" /></div>`)}
+            ${mine.map((r) => html`<div class="option" role="option" aria-selected="false" key=${r.id} onMouseDown=${(e) => { e.preventDefault(); setSugOpen(false); ctx.openDrawer(r.id); }}><${Logo} r=${r} size="sm" /><span class="grow" style=${{ minWidth: 0 }}><b>${r.name}</b><span class="small c3" style=${{ display: 'block' }}>${r.amount ? rMoney(r) + ' · ' : ''}${r.status === 'cancelled' ? 'cancelled' : (r.category === 'document' ? 'expires ' : 'renews ') + fmt(r.date)}</span></span><${Icon} n="chevron-right" c="s" /></div>`)}
             ${newTpls.length > 0 && html`<div class="lb-h" aria-hidden="true">Add a new reminder</div>`}
             ${newTpls.map((t) => html`<div class="option" role="option" aria-selected="false" key=${t.name} onMouseDown=${(e) => { e.preventDefault(); try { sessionStorage.setItem('rr-tpl', t.name); } catch (er) { /* ok */ } go('new'); }}><${Logo} r=${t} size="sm" /><span class="grow"><b>Add ${t.name}</b><span class="small c3" style=${{ display: 'block' }}>${R.priceOf(t, CUR) ? money(R.priceOf(t, CUR)) + ' / ' + cyc(t.cycle).per : cat(t.category).one}</span></span><${Icon} n="plus" c="s" /></div>`)}
           </div>`}</div>

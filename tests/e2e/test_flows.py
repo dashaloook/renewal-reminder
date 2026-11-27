@@ -31,10 +31,12 @@ def pick_date(page: Page, field_id, day_iso):
     cell.first.click()
 
 
-def add_reminder(page: Page, name, amount="12.50", days=20, note=""):
+def add_reminder(page: Page, name, amount="12.50", days=20, note="", currency=None):
     page.goto(page.url.split("#")[0] + "#/new")
     page.locator(".chip", has_text="Enter manually").click()
     page.locator("#f-name").fill(name)
+    if currency:
+        page.get_by_label("Currency").select_option(currency)
     page.locator("#f-amount").fill(amount)
     pick_date(page, "f-date", iso(days))
     if note:
@@ -395,27 +397,45 @@ def test_currency_defaults_to_dollars_and_can_switch(page: Page, base_url, error
     page.goto(base_url + "/")
     page.get_by_role("button", name="Try the demo without signing up").click()
     page.get_by_role("button", name="Let’s find yours").click()
-    cur = page.get_by_role("radiogroup", name="Currency")
+    cur = page.get_by_role("radiogroup", name="Main currency")
     expect(cur.get_by_role("radio", name="US dollar")).to_have_attribute("aria-checked", "true")
     expect(page.locator(".cur-rate")).to_contain_text("₴40.00")                # today's rate is shown
     expect(page.locator(".onb3-svc.on")).to_contain_text("$17.99")             # Netflix Standard
     cur.get_by_role("radio", name="Hryvnia").click()
-    expect(cur.get_by_role("radio", name="Hryvnia")).to_have_attribute("aria-checked", "true")
-    expect(page.locator(".onb3-svc.on")).to_contain_text("₴719.60")            # 17.99 × 40, not the same number
-    page.get_by_role("button", name="Add 1 reminder").click()
+    expect(page.locator(".onb3-svc.on")).to_contain_text("₴719.60")            # 17.99 × 40
+    page.get_by_role("button", name=re.compile("^Megogo")).click()
+    page.get_by_role("button", name="Add 2 reminders").click()
     page.get_by_role("button", name="Go to my dashboard").click()
-    expect(find(page, "Spotify Family").first).to_contain_text("₴719.60")      # saved $17.99 converted too
+    expect(find(page, "Megogo").first).to_contain_text("₴99.00")               # added in hryvnias
+    expect(find(page, "Spotify Family").first).to_contain_text("$17.99")       # entered in dollars, stays in dollars
     page.goto(base_url + "/#/new")
-    expect(page.locator("label", has_text="UAH")).to_have_count(1)    # amount field shows the currency
+    expect(page.get_by_label("Currency")).to_have_value("UAH")                # new reminders start in the main currency
 
 
-def test_switching_currency_converts_saved_amounts_and_can_undo(page: Page, base_url, errors):
+def test_each_reminder_keeps_its_currency_and_totals_convert(page: Page, base_url, errors):
     start_demo(page, base_url)
-    page.set_viewport_size({"width": 1280, "height": 900})
+    add_reminder(page, "QA Kyiv gym", amount="800", currency="UAH").get_by_role("button", name="Go to my list").click()
+    expect(find(page, "QA Kyiv gym").first).to_contain_text("₴800.00")
     expect(find(page, "Spotify Family").first).to_contain_text("$17.99")
+    page.goto(base_url + "/#/dashboard")
+    month = page.locator(".card", has_text="This month").first
+    expect(month).to_contain_text("in USD at today’s rate")                    # mixed currencies are converted
+    page.set_viewport_size({"width": 1280, "height": 900})
     page.locator(".profile-btn").click()
-    page.get_by_role("radiogroup", name="Currency").get_by_role("radio", name="Euro").click()
-    expect(page.locator(".toast")).to_contain_text("Amounts converted to € EUR")
-    expect(page.locator(".rrow", has_text="Spotify Family")).to_contain_text("€14.39")   # 17.99 × 40 / 50
-    page.locator(".toast").get_by_role("button", name="Undo").click()
-    expect(page.locator(".rrow", has_text="Spotify Family")).to_contain_text("$17.99")   # back as it was
+    page.get_by_role("radiogroup", name="Main currency").get_by_role("radio", name="Euro").click()
+    expect(month).to_contain_text("€")                                         # totals now in euros
+    expect(month).to_contain_text("in EUR at today’s rate")
+    expect(find(page, "Spotify Family").first).to_contain_text("$17.99")       # amounts are not changed
+    expect(find(page, "QA Kyiv gym").first).to_contain_text("₴800.00")
+
+
+def test_changing_form_currency_converts_the_typical_price(page: Page, base_url, errors):
+    start_demo(page, base_url)
+    page.goto(base_url + "/#/new")
+    page.locator(".chip", has_text="ChatGPT").first.click()
+    expect(page.locator("#f-amount")).to_have_value("20")
+    page.get_by_label("Currency").select_option("UAH")
+    expect(page.locator("#f-amount")).to_have_value("800")                    # 20 × 40
+    page.locator("#f-amount").fill("750")
+    page.get_by_label("Currency").select_option("EUR")
+    expect(page.locator("#f-amount")).to_have_value("750")                    # typed by the person: kept
