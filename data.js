@@ -110,7 +110,7 @@
       const start = i === 0 ? t : new Date(t.getFullYear(), t.getMonth() + i, 1);
       const end = new Date(t.getFullYear(), t.getMonth() + i + 1, 0);
       const value = list.reduce((s, r) => s + occurrences(r, start, end).length * r.amount, 0);
-      months.push({ label: start.toLocaleDateString('en-GB', { month: 'short' }), long: start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }), value });
+      months.push({ label: start.toLocaleDateString('en-GB', { month: 'short' }), long: start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }), start: iso(start), value });
     }
     return { month, year, next30Count: next30.length, next30Sum: next30.reduce((s, x) => s + x.r.amount, 0), byCat, months };
   }
