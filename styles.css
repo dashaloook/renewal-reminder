@@ -503,3 +503,99 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
 .clear-btn::before{content:'';position:absolute;inset:-8px}  /* 44px touch area */
 .clear-btn:hover{background:var(--border);color:var(--text)}
 .clear-btn:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+
+/* Calendar header: month and summary on the left, Today / previous / next on the right */
+.cal-head{flex-wrap:nowrap;align-items:flex-start}
+.cal-name{gap:2px;min-width:0}
+.cal-name .cal-title{text-align:left;min-width:0}
+.cal-nav{gap:6px;flex:none}
+.cal-nav .icon-btn:disabled,.dp-head .icon-btn:disabled{opacity:.35;cursor:default}
+/* Date picker: opens to the left of the field when there is no room on the right */
+.dp-head .dp-title{padding-left:6px}
+@media (hover:none),(max-width:860px){.dp-foot{display:none}}  /* keyboard hint only where there is a keyboard */
+/* iPhone Safari zooms in when a field's text is under 16px: keep 16px on phones */
+@media (max-width:860px),(hover:none){.filters-card .input,.filters-card select.input{font-size:16px}}
+
+/* ---- Create / edit reminder on phones (Mobbin: Perplexity, Slack — fixed Cancel/Save, no tab bar) ---- */
+.form-bar,.notif-inline{display:none}
+@media (max-width:860px){
+  .is-form .bottom-bar,.is-form .fab{display:none}
+  .is-form .main{padding-bottom:calc(140px + env(safe-area-inset-bottom, 0px))}
+  .form-layout .preview{display:none}          /* the summary line in the bar replaces the big preview */
+  .form-actions{display:none}
+  .notif-inline{display:block;margin-top:8px}
+  .form-bar{display:flex;flex-direction:column;gap:8px;position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--muted);box-shadow:0 -6px 20px rgba(22,19,43,.06);padding:10px 16px calc(env(safe-area-inset-bottom, 0px) + 12px)}
+  .form-bar-sum{display:block;min-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .form-bar-sum .icon{color:var(--brand);vertical-align:-2px;margin-right:6px}
+  .form-bar .btn{min-height:48px}
+}
+
+/* My reminders title on phones: counts on the right of the title ("17 all · 3 need a decision") */
+.on-phone{display:none}
+@media (max-width:860px){
+  .on-desk{display:none}.on-phone{display:inline}
+  .ph-row{flex-wrap:wrap!important;justify-content:space-between;align-items:center!important;width:100%;row-gap:4px!important}
+  .ph-row .h1{font-size:26px;line-height:32px;white-space:nowrap}
+  .ph-meta{flex-wrap:wrap;justify-content:flex-end;text-align:right;gap:4px 6px;font-size:14px}
+  .ph-meta .badge-btn{white-space:nowrap}
+}
+
+/* ---- Onboarding v3: 3 short steps, one big button fixed at the bottom (Mobbin: On, Doji) ---- */
+.onb.onb3{display:flex;flex-direction:column;align-items:stretch;gap:0;min-height:100vh;min-height:100dvh;height:auto;padding:0;background:var(--bg-warm)}
+.onb3>*{width:100%;max-width:600px;margin:0 auto;padding-left:24px;padding-right:24px}
+.onb3-top{display:flex;align-items:center;gap:16px;padding-top:16px;padding-bottom:8px;min-height:64px}
+.onb3-prog{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.onb3-prog i{height:5px;border-radius:999px;background:var(--muted);transition:background .2s}
+.onb3-prog i.on{background:var(--brand)}
+.onb3-body{flex:1;display:flex;flex-direction:column;gap:16px;padding-top:16px;padding-bottom:16px}
+.onb3-body.s1{justify-content:center}
+.onb3-body .h1.big{margin:0}
+.onb3-sub{margin:0}
+.onb3-foot{position:sticky;bottom:0;display:flex;flex-direction:column;gap:8px;padding-top:12px;padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 20px);background:linear-gradient(to bottom, transparent, var(--bg-warm) 16px)}
+.onb3-foot .btn{min-height:52px;font-size:16px}
+.onb3-total{text-align:center}
+/* Step 1: the pain vs. the reminder */
+.onb3-hero{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.onb3-alert{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:16px;background:var(--surface);box-shadow:var(--shadow-s)}
+.onb3-alert .grow{display:flex;flex-direction:column;min-width:0}
+.onb3-alert.bad{border:1px solid var(--danger-subtle);transform:rotate(-1.5deg);opacity:.92}
+.onb3-alert.good{border:2px solid var(--brand-subtle);transform:rotate(1deg)}
+.onb3-emo{font-size:28px;line-height:1}
+.danger-txt{color:var(--danger);white-space:nowrap}
+.onb3-vs{align-self:center;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+.onb3-stat{display:flex;align-items:center;gap:14px;margin:4px 0 0;padding:14px 16px;border-radius:14px;background:var(--brand-subtle);color:var(--text)}
+.onb3-stat-n{font-size:30px;font-weight:700;color:var(--brand);line-height:1}
+/* Step 2: services with plans */
+.onb3-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.onb3-svc{background:var(--surface);border:1px solid var(--muted);border-radius:16px;overflow:hidden}
+.onb3-svc.on{border:2px solid var(--brand)}
+.onb3-svc-head{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border:0;background:none;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.onb3-svc.on .onb3-svc-head{padding:11px 13px}
+.onb3-svc-head .grow{display:flex;flex-direction:column;min-width:0}
+.onb3-check{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--subtle);color:var(--text-2);flex:none}
+.onb3-svc.on .onb3-check{background:var(--primary);color:var(--inverse)}
+.onb3-opts{display:flex;flex-direction:column;gap:10px;padding:0 13px 13px 57px}
+.onb3-opts .chip{padding:6px 12px;font-size:14px}
+.onb3-date{gap:12px;align-items:center}
+.onb3-date .datefield{flex:1;max-width:220px}
+/* Step 3: you're covered */
+.onb3-done{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px}
+.onb3-duck{width:120px;height:120px;animation:onb3-pop .4s ease}
+.onb3-sum{list-style:none;margin:0;padding:8px;display:flex;flex-direction:column;gap:2px;background:var(--surface);border-radius:16px;box-shadow:var(--shadow-s)}
+.onb3-sum li{display:flex;align-items:center;gap:12px;padding:8px}
+.onb3-sum li .grow{display:flex;flex-direction:column;min-width:0}
+.onb3-flow{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.onb3-flow li{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:12px 8px;border-radius:14px;background:var(--surface);font-size:13px;color:var(--text-2)}
+.onb3-flow li span{font-size:22px;line-height:1;background:none}
+@keyframes onb3-pop{from{transform:scale(.6);opacity:0}}
+@media (max-width:480px){
+  .onb3>*{padding-left:16px;padding-right:16px}
+  .onb3-body .h1.big{font-size:28px;line-height:34px}
+  .onb3-opts{padding-left:13px}
+  .onb3-stat-n{font-size:26px}
+  .onb3-duck{width:92px;height:92px}
+  .onb3-body.s3{gap:12px;padding-top:4px}
+  .onb3-sum li{padding:6px 8px}
+  .onb3-flow li{padding:10px 6px}
+}
+@media (prefers-reduced-motion:reduce){.onb3-duck{animation:none}.onb3-alert{transform:none}}

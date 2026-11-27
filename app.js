@@ -43,6 +43,7 @@ const P = {
   list: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>', check: '<path d="M20 6 9 17l-5-5"/>', x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>',
+  'calendar-today': '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><rect x="10" y="14" width="4" height="4" rx="1" fill="currentColor" stroke="none"/>',
   'chevron-right': '<path d="m9 18 6-6-6-6"/>', 'panel-close': '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>', 'panel-open': '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/>', 'chevron-left': '<path d="m15 18-6-6 6-6"/>', 'chevron-down': '<path d="m6 9 6 6 6-6"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
@@ -362,7 +363,7 @@ function Shell({ ctx, page, children }) {
   // Close the profile menu on a click/tap anywhere outside it, or with Esc (focus goes back to the button).
   useEffect(() => {
     if (!menu) return;
-    const outside = (e) => { if (!e.target.closest('.profile')) setMenu(false); };
+    const outside = (e) => { if (!e.target.closest('.profile, .m-sheet, .bottom-bar')) setMenu(false); };  // the phone sheet and its Profile button handle their own taps
     const esc = (e) => { if (e.key === 'Escape') { setMenu(false); const b = document.querySelector('.profile-btn'); if (b) b.focus(); } };
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', esc); };
@@ -374,7 +375,7 @@ function Shell({ ctx, page, children }) {
   const Menu = () => html`<div class="menu" role="menu" style=${{ minWidth: 200 }}>
     ${R.CLOUD_ACCOUNT && ctx.openDeleteAccount && html`<button role="menuitem" class="danger-item" onClick=${() => { setMenu(false); ctx.openDeleteAccount(); }}><${Icon} n="trash" c="s" />Delete account</button><div class="menu-sep" role="separator"></div>`}
     <button role="menuitem" onClick=${() => { setMenu(false); ctx.logout(); }}><${Icon} n="logout" c="s" />Log out</button></div>`;
-  return html`<div class="app">
+  return html`<div class=${'app' + (page === 'new' || page === 'edit' ? ' is-form' : '')}>
     <aside class=${'sidebar' + (collapsed ? ' collapsed' : '')} aria-label="Main navigation">
       <div class="side-head"><div class="brand"><span class="brand-mark"><${Icon} n="bell" c="s" /></span><span class="lbl col brand-txt"><span>Renewal Reminder</span><${Demo} /></span></div>
         <button class="side-toggle" aria-label=${collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title=${collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded=${!collapsed} aria-controls="side-nav" onClick=${toggleSide}><${Icon} n=${collapsed ? 'panel-open' : 'panel-close'} /></button></div>
@@ -441,74 +442,82 @@ function EmptyState({ title = 'No reminders yet' }) {
     <div class="row wrap" style=${{ justifyContent: 'center', gap: 8 }} role="group" aria-label="Popular services"><span class="small c3">Popular:</span>${pop.map((n) => html`<button type="button" class="chip" onClick=${() => start(n)}>${n}</button>`)}</div></div>`;
 }
 
-// ---------- Onboarding (v2: 3 steps, skippable) ----------
-const ONB_SERVICES = ['Netflix', 'Spotify Family', 'ChatGPT Plus', 'iCloud+'];
+// ---------- Onboarding (v3: 3 short steps — pain → pick your first reminders → you're covered) ----------
+// Plans and prices are typical EU list prices (estimates); people can change them later.
+const ONB = [
+  { name: 'Netflix', tone: 'rose', plans: [['With ads', 5.99], ['Standard', 13.99], ['Premium', 19.99]], def: 1, days: 6 },
+  { name: 'Spotify', tpl: 'Spotify Family', tone: 'yellow', plans: [['Individual', 11.99], ['Duo', 16.99], ['Family', 19.99]], def: 0, days: 12 },
+  { name: 'ChatGPT', tpl: 'ChatGPT Plus', tone: 'sky', plans: [['Plus', 20], ['Pro', 200]], def: 0, days: 17 },
+  { name: 'iCloud+', tone: 'sky', plans: [['50 GB', 0.99], ['200 GB', 2.99], ['2 TB', 9.99]], def: 1, days: 9 },
+  { name: 'YouTube Premium', tone: 'rose', plans: [['Individual', 12.99], ['Family', 25.99]], def: 0, days: 15 },
+  { name: 'Disney+', tone: 'lavender', plans: [['With ads', 5.99], ['Standard', 9.99], ['Premium', 13.99]], def: 1, days: 21 },
+  { name: 'Amazon Prime', tone: 'yellow', plans: [['Monthly', 8.99, 'monthly'], ['Yearly', 89.9, 'yearly']], def: 0, days: 24 },
+  { name: 'Adobe Creative Cloud', tone: 'peach', plans: [['Photography', 11.99], ['All Apps', 62.99]], def: 0, days: 27 },
+];
+const ONB_DEMO = ['Netflix', 'Spotify', 'ChatGPT'];
+const onbPlan = (s, i) => { const [label, amount, cycle] = s.plans[i]; return { label, amount, cycle: cycle || 'monthly' }; };
+const perMonth = (p) => (p.cycle === 'yearly' ? p.amount / 12 : p.amount);
+
 function Onboarding({ ctx }) {
   const [step, setStep] = useState(1);
-  const [reason, setReason] = useState('No access to account'); const [posted, setPosted] = useState(false);
-  const [sel, setSel] = useState(ctx.state.account === 'new' || isCloud(ctx.state.account) ? [] : ['Netflix', 'Spotify Family', 'ChatGPT Plus']);
-  const [why, setWhy] = useState(false); const [other, setOther] = useState(false); const [busy, setBusy] = useState(false);
-  const services = ONB_SERVICES.map((n) => R.TEMPLATES.find((t) => t.name === n));
-  const chosen = services.filter((s) => sel.includes(s.name)); const monthly = chosen.reduce((a, s) => a + s.amount, 0);
+  const demo = !(ctx.state.account === 'new' || isCloud(ctx.state.account));
+  // picks: { [service name]: { plan: index, date: 'YYYY-MM-DD' } }
+  const [picks, setPicks] = useState(() => Object.fromEntries((demo ? ONB_DEMO : []).map((n) => { const s = ONB.find((x) => x.name === n); return [n, { plan: s.def, date: R.off(s.days) }]; })));
+  const [added, setAdded] = useState([]);
+  const toggle = (s) => setPicks((p) => { const n = { ...p }; if (n[s.name]) delete n[s.name]; else n[s.name] = { plan: s.def, date: R.off(s.days) }; return n; });
+  const setPick = (name, patch) => setPicks((p) => ({ ...p, [name]: { ...p[name], ...patch } }));
+  const chosen = ONB.filter((s) => picks[s.name]).map((s) => ({ s, p: onbPlan(s, picks[s.name].plan), date: picks[s.name].date }));
+  const monthly = chosen.reduce((a, c) => a + perMonth(c.p), 0);
   const leave = () => { ctx.update(() => ({ onboarded: true })); go('dashboard'); };
-  const finish = () => {
-    if (!chosen.length) { leave(); return; }
-    setBusy(true);
-    setTimeout(() => {
-      const have = ctx.state.reminders.map((r) => r.name);
-      const fresh = chosen.filter((s) => !have.includes(s.name));
-      ctx.update((s) => ({ onboarded: true, reminders: [...s.reminders, ...fresh.map((t, i) => ({ id: 'ob-' + uid(), name: t.name, category: t.category, amount: t.amount, cycle: t.cycle, date: R.off(5 + i * 4), remind: 7, channel: defaultChannel(), note: '', status: 'active', reason: '', followUp: '', tone: t.tone, history: [{ type: 'created', date: R.iso(R.today()), text: 'Added during setup' }] }))] }));
-      ctx.showToast(fresh.length ? `${fresh.length} service${fresh.length > 1 ? 's' : ''} added to your list` : 'Your services are already in the list', fresh.length ? 'Check the charge dates in My reminders — prices and dates are estimates.' : 'Demo data already includes them.', null);
-      go('dashboard');
-    }, 600);
+  const create = () => {
+    const have = new Set(ctx.state.reminders.map((r) => r.name.toLowerCase()));
+    const fresh = chosen.filter((c) => !have.has(c.s.name.toLowerCase()));
+    const tpl = (c) => R.TEMPLATES.find((t) => t.name === (c.s.tpl || c.s.name)) || {};
+    const recs = fresh.map((c) => ({ id: 'ob-' + uid(), name: c.s.name, category: 'subscription', amount: c.p.amount, cycle: c.p.cycle, date: c.date, remind: 7, channel: defaultChannel(), link: tpl(c).url || '',
+      note: c.s.plans.length > 1 ? `${c.p.label} plan` : '', status: 'active', reason: '', followUp: '', tone: c.s.tone, history: [{ type: 'created', date: R.iso(R.today()), text: 'Added during setup' }] }));
+    if (recs.length) ctx.update((st) => ({ reminders: [...st.reminders, ...recs] }));
+    setAdded(chosen); setStep(3);
   };
   const headRef = useRef(null);
   useEffect(() => { headRef.current && headRef.current.focus(); }, [step]);
-  const bar = html`<div class="onb-prog" role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow=${step} aria-label=${`Step ${step} of 3`}><span class="small c3">${step} / 3</span><span class="segs" aria-hidden="true">${[1, 2, 3].map((i) => html`<i class=${i <= step ? 'on' : ''}></i>`)}</span></div>`;
-  const timeline = [['Today', 'Netflix renews in 7 days. We let you know.', 'bell', 'brand'], ['Tomorrow', 'Not now? Postpone with a reason.', 'hourglass', 'amber'], ['In 5 days', 'We remind you, with your note.', 'reset', 'brand'], ['In 7 days · charge date', 'You’ve decided. No surprise.', 'circle-check', 'green']];
-  return html`<main class="onb" id="main" tabindex="-1">
-    <div class="onb-top"><div class="brand" style=${{ padding: 0 }}><span class="brand-mark"><${Icon} n="bell" c="s" /></span>Renewal Reminder<${Demo} /></div><${Btn} v="ghost" sm onClick=${leave}>${step === 3 ? 'I’ll add later' : 'Skip'}<//></div>
-    <section class="onb-card wide" aria-labelledby="onb-h">
-      ${bar}
-      <div class="onb-cols">
-        <div class="col gap16 onb-copy">
-          ${step === 1 && html`<h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>Decide before you’re charged.</h1><p class="body-l c2" style=${{ margin: 0 }}>We warn you a week early, and keep your decision open if you need more time.</p>`}
-          ${step === 2 && html`<h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>Can’t decide now?<br />Postpone it.</h1><p class="body-l c2" style=${{ margin: 0 }}>Say why and when. We hold it for you and remind you before the charge date.</p>`}
-          ${step === 3 && html`<h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>Which of these<br />do you pay for?</h1><p class="body-l c2" style=${{ margin: 0 }}>Pick your services. We’ll total them and add them to your list.</p>
-            <p class="row c2" style=${{ margin: 0, alignItems: 'flex-start' }}><${Icon} n="shield" c="s" style=${{ color: 'var(--success)', marginTop: 2 }} /><span>We never connect to your bank. You decide what to add, and only that is stored. <button type="button" class="link" aria-expanded=${why} onClick=${() => setWhy(!why)}>How we use your data</button></span></p>
-            ${why && html`<div class="small c2" role="note" style=${{ padding: '10px 12px', background: 'var(--subtle)', borderRadius: 8 }}>We store only the reminders you create: name, amount, date and your notes. No bank access, no email scanning, no selling data. In this prototype everything stays in your browser.</div>`}`}
-        </div>
-        <div class="onb-panel">
-          ${step === 1 && html`<div class="card pad24 col gap16" style=${{ boxShadow: 'var(--shadow-s)' }}>
-            <div class="row gap12"><span class="logo tone-rose">N</span><b class="h3 grow">Netflix · €15.49</b><span class="badge t-neutral">Example</span></div>
-            <ol class="tl" aria-label="How a renewal goes with Renewal Reminder">${timeline.map(([d, t, ic, tn]) => html`<li><span class=${'dot t-' + tn}><${Icon} n=${ic} c="s" /></span><div><b>${d}</b><div class="c2">${t}</div></div></li>`)}</ol></div>`}
-          ${step === 2 && html`<div class="col gap16">
-            <div class="card pad24 col gap16" style=${{ boxShadow: 'var(--shadow-s)', border: '2px solid var(--brand-subtle)' }}>
-              <div class="row"><b class="h3 grow" id="why-l">Why are you postponing?</b><span class="badge t-brand">Try it</span></div>
-              <div class="row wrap" role="radiogroup" aria-labelledby="why-l">${R.REASONS.map((x) => html`<button type="button" class="chip" role="radio" aria-checked=${reason === x} onClick=${() => { setReason(x); setPosted(false); }}>${reason === x && html`<${Icon} n="check" c="s" />`}${x}</button>`)}</div>
-              <div class="row" style=${{ padding: '10px 12px', background: 'var(--subtle)', borderRadius: 8, flexWrap: 'wrap' }}><${Icon} n="clock" c="s cb" /><span class="grow">Remind me tomorrow, 9:00</span><span class="badge t-amber"><${Icon} n="lock" />Latest: day before charge</span></div>
-              <${Btn} icon="hourglass" full disabled=${posted} onClick=${() => setPosted(true)}>${posted ? 'Postponed' : 'Postpone'}<//>
-            </div>
-            <div class="small c3 row" style=${{ justifyContent: 'center' }}><${Icon} n="chevron-down" c="s" />Then it waits here</div>
-            <div class="card pad20 col gap12" aria-live="polite" style=${{ border: posted ? '2px solid var(--brand-subtle)' : '1px dashed var(--border)', background: posted ? 'var(--surface)' : 'transparent' }}>
-              <div class="row cb"><${Icon} n="hourglass" c="s" /><b style=${{ color: 'var(--text)' }}>Unfinished decisions</b></div>
-              ${posted ? html`<div class="row gap12"><span class="logo sm tone-rose">N</span><div class="col"><b>Netflix · €15.49</b><span class="small c3">${reason} · reminder tomorrow, 9:00</span></div></div>` : html`<span class="small c3">Press “Postpone” to see Netflix land here.</span>`}
-            </div></div>`}
-          ${step === 3 && html`<div class="card pad24 col gap16" style=${{ boxShadow: 'var(--shadow-s)' }}>
-            <div class="row"><b class="h3 grow" id="svc-l">Your services</b><span class="small c3" aria-live="polite">${sel.length} selected</span></div>
-            <div class="row wrap" role="group" aria-labelledby="svc-l">${services.map((s) => { const on = sel.includes(s.name); return html`<button type="button" class="chip" aria-pressed=${on} onClick=${() => setSel(on ? sel.filter((x) => x !== s.name) : [...sel, s.name])}>${on && html`<${Icon} n="check" c="s" />`}${s.name} · ${money(s.amount)}</button>`; })}
-              <button type="button" class="chip dashed" aria-expanded=${other} onClick=${() => setOther(!other)}><${Icon} n="plus" c="xs" />Other service</button></div>
-            ${other && html`<span class="msg hint" role="status"><${Icon} n="info" c="xs" />Any other service can be added in “My reminders” after setup.</span>`}
-            <span class="small c3">Prices are estimates. You can edit them later.</span>
-            <div class="totals" aria-live="polite"><div><div class="c2">Per month</div><div class="v">${money(monthly)}</div></div><div style=${{ background: 'var(--brand-subtle)' }}><div class="c2">Per year</div><div class="v cb">${money(monthly * 12)}</div></div></div>
-            <div class="c2" aria-live="polite">${sel.length ? `≈ ${money(monthly * 12)} a year across ${sel.length} service${sel.length > 1 ? 's' : ''}` : 'Tap a service above to see what it costs you per year.'}</div></div>`}
-        </div>
-      </div>
-      <div class="row onb-footer" style=${{ justifyContent: 'space-between' }}>
-        ${step > 1 ? html`<${Btn} v="ghost" icon="chevron-left" onClick=${() => setStep(step - 1)}>Back<//>` : html`<span></span>`}
-        ${step < 3 ? html`<${Btn} iconR="arrow-right" onClick=${() => setStep(step + 1)}>Next<//>` : html`<${Btn} iconR="arrow-right" loading=${busy} onClick=${finish}>${sel.length ? `Add ${sel.length} service${sel.length > 1 ? 's' : ''}` : 'Continue without adding'}<//>`}
-      </div>
-    </section>
+  const total = (m) => html`<b>${money(m)}</b>/month · <b>${money(m * 12)}</b>/year`;
+
+  const body = step === 1 ? html`
+    <div class="onb3-hero" aria-hidden="true">
+      <div class="onb3-alert bad"><span class="onb3-emo">😬</span><div class="grow"><b>Netflix</b><span class="small c2">Charged today · you forgot to cancel</span></div><b class="danger-txt">−€13.99</b></div>
+      <span class="onb3-vs">instead</span>
+      <div class="onb3-alert good"><span class="onb3-emo">🙂</span><div class="grow"><b>Netflix renews in 7 days</b><span class="small c2">Keep it, cancel it, or decide later</span></div><span class="badge t-brand">Reminder</span></div>
+    </div>
+    <h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>No more surprise charges.</h1>
+    <p class="body-l c2 onb3-sub">We remind you a week before you pay. You decide.</p>
+    <p class="onb3-stat"><span class="onb3-stat-n">42%</span><span>of people found they were still paying for a subscription they forgot about. <a class="link small" href="https://www.cnbc.com/2022/09/06/consumers-underestimate-monthly-subscription-costs-by-at-least-100.html" target="_blank" rel="noopener">Source</a></span></p>`
+  : step === 2 ? html`
+    <h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>What do you pay for?</h1>
+    <p class="body-l c2 onb3-sub">Tap to add — these become your first reminders. Pick your plan and next charge date.</p>
+    <ul class="onb3-list" aria-label="Services">${ONB.map((s) => { const on = !!picks[s.name]; const pk = picks[s.name]; const cheapest = Math.min(...s.plans.map((x) => x[1]));
+      return html`<li class=${'onb3-svc' + (on ? ' on' : '')} key=${s.name}>
+        <button type="button" class="onb3-svc-head" aria-pressed=${on} onClick=${() => toggle(s)}><${Logo} r=${{ name: s.name, tone: s.tone }} size="sm" /><span class="grow"><b>${s.name}</b><span class="small c3">${on ? `${onbPlan(s, pk.plan).label} · ${money(onbPlan(s, pk.plan).amount)} / ${onbPlan(s, pk.plan).cycle === 'yearly' ? 'year' : 'month'}` : `from ${money(cheapest)}`}</span></span><span class="onb3-check" aria-hidden="true">${on ? html`<${Icon} n="check" c="s" />` : html`<${Icon} n="plus" c="s" />`}</span></button>
+        ${on && html`<div class="onb3-opts"><div class="row wrap" role="radiogroup" aria-label=${`${s.name} plan`}>${s.plans.map((pl, i) => html`<button type="button" class="chip sm" role="radio" aria-checked=${pk.plan === i} onClick=${() => setPick(s.name, { plan: i })}>${pl[0]} · ${money(pl[1])}</button>`)}</div>
+          <div class="row onb3-date"><span class="small c2">Next charge</span><${DateField} id=${'onb-d-' + s.name.replace(/\W/g, '')} height=${40} min=${R.iso(R.today())} value=${pk.date} onChange=${(v) => setPick(s.name, { date: v })} /></div></div>`}
+      </li>`; })}</ul>
+    <p class="small c3" style=${{ margin: 0 }}>Prices are typical list prices — change them anytime. Anything else? Add it from “My reminders” later.</p>`
+  : html`
+    <div class="onb3-done"><img src="duck-wave.png" width="120" height="120" alt="" class="onb3-duck" />
+      <h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>${added.length ? 'You’re covered 🎉' : 'All set 👋'}</h1>
+      <p class="body-l c2 onb3-sub">${added.length ? html`${added.length} reminder${added.length > 1 ? 's' : ''} · ${total(added.reduce((a, c) => a + perMonth(c.p), 0))}` : 'Add your first reminder whenever you’re ready.'}</p></div>
+    ${added.length > 0 && html`<ul class="onb3-sum">${added.slice().sort((a, b) => a.date.localeCompare(b.date)).map((c) => html`<li><${Logo} r=${{ name: c.s.name, tone: c.s.tone }} size="sm" /><span class="grow"><b>${c.s.name}</b><span class="small c3">${c.p.label} · renews ${fmt(c.date)}</span></span><span class="small cb">🔔 ${fmt(R.iso(R.addDays(R.parse(c.date), -7)) < R.iso(R.today()) ? R.iso(R.today()) : R.iso(R.addDays(R.parse(c.date), -7)))}</span></li>`)}</ul>`}
+    <ol class="onb3-flow" aria-label="How it works"><li><span class="t-brand">🔔</span>We remind you 7 days before</li><li><span class="t-amber">🤔</span>Keep, cancel or decide later</li><li><span class="t-green">✅</span>No surprise charges</li></ol>`;
+
+  const foot = step === 1 ? html`<${Btn} full iconR="arrow-right" onClick=${() => setStep(2)}>Let’s find yours<//>`
+    : step === 2 ? html`<div class="small c2 onb3-total" aria-live="polite">${chosen.length ? html`${chosen.length} selected · ${total(monthly)}` : 'Nothing selected yet'}</div><${Btn} full iconR="arrow-right" onClick=${create}>${chosen.length ? `Add ${chosen.length} reminder${chosen.length > 1 ? 's' : ''}` : 'Continue without adding'}<//>`
+    : html`<${Btn} full iconR="arrow-right" data-autofocus onClick=${leave}>Go to my dashboard<//>`;
+
+  return html`<main class="onb onb3" id="main" tabindex="-1">
+    <div class="onb3-top">${step === 2 ? html`<button type="button" class="icon-btn" aria-label="Back" onClick=${() => setStep(1)}><${Icon} n="chevron-left" /></button>` : html`<span class="brand-mark" style=${{ width: 32, height: 32 }} aria-hidden="true"><${Icon} n="bell" c="s" /></span>`}
+      <div class="onb3-prog" role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow=${step} aria-label=${`Step ${step} of 3`}>${[1, 2, 3].map((i) => html`<i class=${i <= step ? 'on' : ''}></i>`)}</div>
+      ${step < 3 ? html`<${Btn} v="ghost" sm onClick=${leave}>Skip<//>` : html`<span style=${{ width: 56 }}></span>`}</div>
+    <section class=${'onb3-body s' + step} aria-labelledby="onb-h">${body}</section>
+    <div class="onb3-foot">${foot}</div>
   </main>`;
 }
 
@@ -649,12 +658,15 @@ function UnfinishedCard({ r, ctx }) {
     <${ServiceLink} r=${r} />
   </article>`;
 }
-function CatBars({ data }) {
+function CatBars({ data: all }) {
+  // Only categories that cost something, biggest first (empty ones just said "No cost").
+  const data = all.filter((d) => d.value > 0).sort((a, b) => b.value - a.value);
+  if (!data.length) return html`<span class="c2">No costs yet. Add an amount to a reminder to see where your money goes.</span>`;
   const max = Math.max(...data.map((d) => d.value), 1); const total = data.reduce((s, d) => s + d.value, 0); const top = [...data].sort((a, b) => b.value - a.value)[0];
   const desc = data.map((d) => `${d.label} ${d.value ? money(d.value) : 'no cost'}`).join(', ');
   return html`<div class="col gap12" role="img" aria-label=${`Bar chart, spend per year by category: ${desc}.`}>
     ${data.map((d) => html`<div class="row gap12" key=${d.id}><span class="c2" style=${{ width: 100 }}>${d.label}</span><svg class="grow" height="12" aria-hidden="true"><rect width="100%" height="12" rx="6" fill="var(--subtle)" /><rect width=${`${Math.max(d.value / max * 100, d.value ? 2 : 1.5)}%`} height="12" rx="6" fill=${d.value ? 'var(--brand)' : 'var(--muted)'} /></svg><b style=${{ width: 84, textAlign: 'right' }}>${d.value ? money(d.value) : 'No cost'}</b></div>`)}
-    <span class="small c3">${total ? `${top.label} are the biggest share: ${Math.round(top.value / total * 100)}% of your yearly total.` : 'No costs yet.'}</span></div>`;
+    <span class="small c3">${data.length === 1 ? `All your yearly costs are ${top.label.toLowerCase()}.` : `${top.label} are the biggest share: ${Math.round(top.value / total * 100)}% of your yearly total.`}</span></div>`;
 }
 function MonthBars({ data }) {
   const max = Math.max(...data.map((d) => d.value), 1); const W = 420, H = 190, bw = 40, gap = (W - bw * data.length) / (data.length - 1);
@@ -847,7 +859,7 @@ function DeleteAccount({ ctx, count, onDelete, onClose }) {
 // ---------- DateField: custom date picker in the app's style (replaces the native <input type="date">) ----------
 const WEEK_S = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 function DateField({ id, value, onChange, min, max, className = '', height, describedBy, invalid, placeholder = 'Select a date' }) {
-  const [open, setOpen] = useState(false); const [up, setUp] = useState(false);
+  const [open, setOpen] = useState(false); const [up, setUp] = useState(false); const [shiftX, setShiftX] = useState(0);
   const base = value ? R.parse(value) : R.today();
   const [month, setMonth] = useState(new Date(base.getFullYear(), base.getMonth(), 1));
   const [focus, setFocus] = useState(value || R.iso(R.today()));
@@ -856,7 +868,7 @@ function DateField({ id, value, onChange, min, max, className = '', height, desc
   const ok = (iso) => (!min || iso >= min) && (!max || iso <= max);
   const openIt = () => {
     const b = value ? R.parse(value) : R.today(); setMonth(new Date(b.getFullYear(), b.getMonth(), 1)); setFocus(value || (ok(todayIso) ? todayIso : (min || max || todayIso)));
-    try { const r = wrap.current.getBoundingClientRect(); setUp(window.innerHeight - r.bottom < 380 && r.top > 380); } catch (e) { /* ok */ }
+    try { const r = wrap.current.getBoundingClientRect(); setUp(window.innerHeight - r.bottom < 380 && r.top > 380); const vw = document.documentElement.clientWidth, w = Math.min(316, vw - 16); setShiftX(Math.max(8 - r.left, Math.min(0, vw - 8 - r.left - w)));  /* keep the picker fully on screen */ } catch (e) { /* ok */ }
     setOpen(true);
   };
   useEffect(() => {
@@ -884,14 +896,14 @@ function DateField({ id, value, onChange, min, max, className = '', height, desc
   return html`<div class="datefield" ref=${wrap}>
     <button type="button" id=${id} class=${'input datebtn ' + className + (open ? ' open' : '')} style=${height ? { height } : undefined} aria-haspopup="dialog" aria-expanded=${open} aria-invalid=${invalid ? 'true' : undefined} aria-describedby=${describedBy} onClick=${() => (open ? setOpen(false) : openIt())} onKeyDown=${(e) => { if ((e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') && !open) { e.preventDefault(); openIt(); } }}>
       <span class=${'grow' + (value ? '' : ' c3')}>${value ? fmt(value, { day: 'numeric', month: 'long', year: 'numeric' }) : placeholder}</span><${Icon} n="calendar" c="s" /></button>
-    ${open && html`<div class=${'dp' + (up ? ' up' : '')} role="dialog" aria-label=${'Choose a date, ' + label} onKeyDown=${onKey}>
-      <div class="dp-head"><button type="button" class="icon-btn" aria-label="Previous month" onClick=${() => shift(-1)}><${Icon} n="chevron-left" /></button><b class="dp-title" aria-live="polite">${label}</b><button type="button" class="icon-btn" aria-label="Next month" onClick=${() => shift(1)}><${Icon} n="chevron-right" /></button></div>
+    ${open && html`<div class=${'dp' + (up ? ' up' : '')} style=${shiftX ? { left: shiftX + 'px' } : undefined} role="dialog" aria-label=${'Choose a date, ' + label} onKeyDown=${onKey}>
+      <div class="dp-head"><b class="dp-title" aria-live="polite">${label}</b><span class="row" style=${{ gap: 4 }}><button type="button" class="icon-btn" aria-label="Today" title="Today" disabled=${!ok(todayIso)} onClick=${() => pick(todayIso)}><${Icon} n="calendar-today" c="s" /></button><button type="button" class="icon-btn" aria-label="Previous month" onClick=${() => shift(-1)}><${Icon} n="chevron-left" /></button><button type="button" class="icon-btn" aria-label="Next month" onClick=${() => shift(1)}><${Icon} n="chevron-right" /></button></span></div>
       <div class="dp-grid" role="grid" aria-label=${label} ref=${gridRef}>
         ${WEEK_S.map((w) => html`<span class="dp-wd" aria-hidden="true" key=${w}>${w}</span>`)}
         ${cells.map((d) => { const iso = R.iso(d); const out = d.getMonth() !== month.getMonth(); const dis = !ok(iso);
           return html`<button type="button" key=${iso} data-d=${iso} role="gridcell" class=${'dp-day' + (out ? ' out' : '') + (iso === value ? ' sel' : '') + (iso === todayIso ? ' today' : '')} disabled=${dis} tabindex=${iso === focus ? 0 : -1} aria-selected=${iso === value} aria-current=${iso === todayIso ? 'date' : undefined} aria-label=${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (iso === todayIso ? ', today' : '')} onClick=${() => pick(iso)}>${d.getDate()}</button>`; })}
       </div>
-      <div class="dp-foot"><button type="button" class="link" disabled=${!ok(todayIso)} onClick=${() => pick(todayIso)}>Today</button><span class="small c3">Arrow keys · Esc closes</span></div>
+      <div class="dp-foot"><span class="small c3">Arrow keys move · Enter picks · Esc closes</span></div>
     </div>`}
   </div>`;
 }
@@ -985,13 +997,20 @@ function CreateForm({ ctx, editId }) {
           if (lead !== null && lead < 1) return html`<span class="msg hint"><${Icon} n="info" c="xs" />${lead === 0 ? 'It renews today' : 'This date has passed'}, so we’ll remind you today.</span>`;
           if (lead !== null && f.remind < pref) return html`<span class="msg hint"><${Icon} n="info" c="xs" />Only ${lead} ${lead === 1 ? 'day' : 'days'} left, so we’ll remind you ${f.remind} ${f.remind === 1 ? 'day' : 'days'} before.</span>`;
           return null; })()}</div>
-      <div class="field"><span class="flabel" id="ch-l">Channel</span><div class="seg" role="radiogroup" aria-labelledby="ch-l">${[['browser', 'Browser'], ['email', 'Email']].map(([id, l]) => html`<button type="button" role="radio" aria-checked=${f.channel === id} onClick=${() => set('channel', id)}>${l}</button>`)}</div></div>
+      <div class="field"><span class="flabel" id="ch-l">Channel</span><div class="seg" role="radiogroup" aria-labelledby="ch-l">${[['browser', 'Browser'], ['email', 'Email']].map(([id, l]) => html`<button type="button" role="radio" aria-checked=${f.channel === id} onClick=${() => set('channel', id)}>${l}</button>`)}</div>
+        ${f.channel === 'browser' && !ctx.state.notif && html`<div class="msg-box notif-inline">${ctx.state.notifBlocked
+          ? html`<span class="msg warn"><${Icon} n="bell-off" c="xs" />Notifications are blocked for this site. Allow them in your browser’s site settings, or choose Email.</span>`
+          : html`<span class="msg hint"><${Icon} n="bell" c="xs" />Browser reminders need notifications on this device. <button type="button" class="link" onClick=${ctx.enableNotifications}>Allow notifications</button></span>`}</div>`}</div>
       <div class="field"><label for="f-link">Link to cancel or manage (optional)</label><${Clear} show=${!!f.link} label="Clear link" target="f-link" onClear=${() => set('link', '')}><${GrowText} oneLine id="f-link" className=${errors.link ? 'err' : ''} inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. netflix.com/cancelplan" value=${f.link || ''} aria-invalid=${!!errors.link} aria-describedby="e-link" onInput=${(e) => set('link', e.target.value)} /><//>
         ${errors.link ? html`<span class="msg err" id="e-link"><${Icon} n="info" c="xs" />${errors.link}</span>` : f.link && normUrl(f.link) && !(tplData && tplData.url && f.link === tplData.url) ? html`<span class="msg hint" id="e-link"><${Icon} n="info" c="xs" />Adds a “Cancel on ${hostOf(normUrl(f.link))}” shortcut. We never cancel for you.</span>` : null}</div>
       <div class="field"><label for="f-note">Note (optional)</label><${Clear} show=${!!f.note} label="Clear note" target="f-note" onClear=${() => set('note', '')}><${GrowText} id="f-note" maxlength=${NOTE_MAX} placeholder="e.g. Family plan, shared with Sam" value=${f.note} aria-describedby=${garbled(f.note) ? 'e-note' : f.note.length > NOTE_MAX - 100 ? 'n-count' : undefined} onInput=${(e) => set('note', e.target.value)} /><//>
         ${f.note.length > NOTE_MAX - 100 && html`<span class="small c3" id="n-count" aria-live="polite" style=${{ alignSelf: 'flex-end' }}>${f.note.length} / ${NOTE_MAX}</span>`}
         ${garbled(f.note) && html`<span class="msg warn" id="e-note"><${Icon} n="alert" c="xs" />Some letters came through as “?”. The app you copied from lost them — copy the text again from the original, or type it here.</span>`}</div>
-      <div class="row" style=${{ justifyContent: 'flex-end' }}><${Btn} v="ghost" onClick=${cancel}>Cancel<//><button type="submit" class="btn primary" disabled=${saving} aria-busy=${saving}>${saving ? html`<span class="spinner"></span>Saving…` : html`<${Icon} n="check" />${editing ? 'Save changes' : 'Save reminder'}`}</button></div>
+      <div class="row form-actions" style=${{ justifyContent: 'flex-end' }}><${Btn} v="ghost" onClick=${cancel}>Cancel<//><button type="submit" class="btn primary" disabled=${saving} aria-busy=${saving}>${saving ? html`<span class="spinner"></span>Saving…` : html`<${Icon} n="check" />${editing ? 'Save changes' : 'Save reminder'}`}</button></div>
+    </div>
+    <div class="form-bar">
+      <span class="small c2 form-bar-sum" aria-live="polite">${f.name && f.date ? html`<${Icon} n="bell" c="xs" />We’ll remind you on <b>${fmt(R.daysUntil(remindDate) < 0 ? R.iso(R.today()) : remindDate)}</b> · ${f.channel === 'email' ? 'by email' : 'in this browser'}` : 'Add a name and a date to save.'}</span>
+      <div class="row"><${Btn} v="secondary" onClick=${cancel}>Cancel<//><button type="submit" class="btn primary grow" disabled=${saving} aria-busy=${saving}>${saving ? html`<span class="spinner"></span>Saving…` : html`<${Icon} n="check" />${editing ? 'Save changes' : 'Save reminder'}`}</button></div>
     </div>
     <aside class="preview" aria-label="Preview">
       <div class="card pad24 col gap16" style=${{ border: '2px solid var(--brand-subtle)', borderRadius: 16 }} aria-live="polite">
@@ -1070,7 +1089,7 @@ function ListScreen({ ctx }) {
   const sumLine = (list) => { const s = live(list).reduce((a, o) => a + o.r.amount, 0); return s ? ' · ' + money(s) : ''; };
   const dueLine = (list) => { const n = live(list).length; const c = list.length - n; return [n ? `${n} due${sumLine(list)}` : '', c ? `${c} cancelled` : ''].filter(Boolean).join(' · ') || 'Nothing due'; };
 
-  const header = html`<div class="page-head"><div class="row gap12 wrap" style=${{ alignItems: 'baseline' }}><h1 class="h1">My reminders</h1><div class="row c2">${all.length} reminder${all.length === 1 ? '' : 's'}${counts.unfinished > 0 && html` · <button type="button" class="badge t-brand badge-btn" aria-pressed=${status === 'unfinished'} aria-label=${`${counts.unfinished} need${counts.unfinished === 1 ? 's' : ''} a decision. Show only these`} title="Show only unfinished decisions" onClick=${() => { setQ(''); setCatF('all'); setStatus('unfinished'); }}><${Icon} n="hourglass" />${counts.unfinished} need${counts.unfinished === 1 ? 's' : ''} a decision</button>`}</div></div><${Btn} sm icon="plus" class="ph-add" onClick=${() => go('new')}>Add reminder<//></div>`;
+  const header = html`<div class="page-head"><div class="row gap12 wrap ph-row" style=${{ alignItems: 'baseline' }}><h1 class="h1">My reminders</h1><div class="row c2 ph-meta"><span>${all.length} <span class="on-desk">reminder${all.length === 1 ? '' : 's'}</span><span class="on-phone">all</span></span>${counts.unfinished > 0 && html`<span aria-hidden="true"> · </span><button type="button" class="badge t-brand badge-btn" aria-pressed=${status === 'unfinished'} aria-label=${`${counts.unfinished} need${counts.unfinished === 1 ? 's' : ''} a decision. Show only these`} title="Show only unfinished decisions" onClick=${() => { setQ(''); setCatF('all'); setStatus('unfinished'); }}><${Icon} n="hourglass" />${counts.unfinished} need${counts.unfinished === 1 ? 's' : ''} a decision</button>`}</div></div><${Btn} sm icon="plus" class="ph-add" onClick=${() => go('new')}>Add reminder<//></div>`;
   if (loading) return html`${header}<div class="card pad20"><${Skel} h=${40} /></div><div class="card pad20 col gap12" aria-busy="true"><${Skel} w="200px" h=${28} /><div class="cal-grid">${[...Array(35)].map(() => html`<${Skel} h=${72} style=${{ borderRadius: 8 }} />`)}</div></div>`;
   if (err) return html`${header}<div class="card empty"><span class="ic t-amber"><${Icon} n="alert" /></span><h2 class="h2">We couldn’t load your reminders</h2><p class="c2" style=${{ margin: 0 }}>Your data is safe. Check your connection and try again.</p><${Btn} v="secondary" icon="refresh" loading=${retry} onClick=${() => { setRetry(true); setTimeout(() => { setRetry(false); if (navigator.onLine) { QS = QS === 'error' ? null : QS; ctx.update(() => ({ loadFail: false })); setErr(false); } }, 700); }}>Try again<//></div>`;
   if (!all.length) return html`${header}<${EmptyState} />`;
@@ -1091,8 +1110,9 @@ function ListScreen({ ctx }) {
 
   const calendar = html`<section class="card cal" aria-labelledby="cal-h">
       <div class="cal-head">
-        <div class="row" style=${{ gap: 8 }}><button class="icon-btn" aria-label="Previous month" onClick=${() => shiftMonth(-1)}><${Icon} n="chevron-left" /></button><h2 class="h2 cal-title" id="cal-h" aria-live="polite">${month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</h2><button class="icon-btn" aria-label="Next month" onClick=${() => shiftMonth(1)}><${Icon} n="chevron-right" /></button>${!atToday && html`<${Btn} v="ghost" sm onClick=${() => pick(todayIso)}>Today<//>`}</div>
-        <span class="c2">${monthDue.length ? `${monthDue.length} due in ${monthName(month)}${monthSum ? ' · ' + money(monthSum) : ''}` : `Nothing due in ${monthName(month)}`}</span>
+        <div class="col cal-name"><h2 class="h2 cal-title" id="cal-h" aria-live="polite">${month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</h2>
+          <span class="c2 small">${monthDue.length ? `${monthDue.length} due in ${monthName(month)}${monthSum ? ' · ' + money(monthSum) : ''}` : `Nothing due in ${monthName(month)}`}</span></div>
+        <div class="row cal-nav"><button class="icon-btn" aria-label="Go to today" title="Today" disabled=${atToday} onClick=${() => pick(todayIso, true)}><${Icon} n="calendar-today" /></button><button class="icon-btn" aria-label="Previous month" onClick=${() => shiftMonth(-1)}><${Icon} n="chevron-left" /></button><button class="icon-btn" aria-label="Next month" onClick=${() => shiftMonth(1)}><${Icon} n="chevron-right" /></button></div>
       </div>
       <div class="cal-grid" role="group" aria-label=${`${month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}. Use arrow keys to move between days, Page Up and Page Down to change month.`} onKeyDown=${onKey}>
         ${WEEK.map((w) => html`<span class="cal-wd" aria-hidden="true" key=${w}>${w}</span>`)}${cells}
