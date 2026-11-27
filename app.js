@@ -486,9 +486,9 @@ function Onboarding({ ctx }) {
 
   const body = step === 1 ? html`
     <div class="onb3-hero" aria-hidden="true">
-      <div class="onb3-alert bad"><span class="onb3-emo">😬</span><div class="grow"><b>Netflix</b><span class="small c2">Charged today · you forgot to cancel</span></div><b class="danger-txt">−€13.99</b></div>
+      <div class="onb3-alert bad"><img class="onb3-duck-sm" src="duck-cry.png" width="60" height="60" alt="" /><div class="grow"><b>Netflix</b><span class="small c2">Charged today · you forgot to cancel</span></div><b class="danger-txt">−€13.99</b></div>
       <span class="onb3-vs">instead</span>
-      <div class="onb3-alert good"><span class="onb3-emo">🙂</span><div class="grow"><b>Netflix renews in 7 days</b><span class="small c2">Keep it, cancel it, or decide later</span></div><span class="badge t-brand">Reminder</span></div>
+      <div class="onb3-alert good"><img class="onb3-duck-sm" src="duck-cool.png" width="60" height="60" alt="" /><div class="grow"><b>Netflix renews in 7 days</b><span class="small c2">Keep it, cancel it, or decide later</span></div><span class="badge t-brand">Reminder</span></div>
     </div>
     <h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>No more surprise charges.</h1>
     <p class="body-l c2 onb3-sub">We remind you a week before you pay. You decide.</p>
@@ -507,7 +507,7 @@ function Onboarding({ ctx }) {
     <div class="onb3-done"><img src="duck-wave.png" width="120" height="120" alt="" class="onb3-duck" />
       <h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>${added.length ? 'You’re covered 🎉' : 'All set 👋'}</h1>
       <p class="body-l c2 onb3-sub">${added.length ? html`${added.length} reminder${added.length > 1 ? 's' : ''} · ${total(added.reduce((a, c) => a + perMonth(c.p), 0))}` : 'Add your first reminder whenever you’re ready.'}</p></div>
-    ${added.length > 0 && html`<ul class="onb3-sum">${added.slice().sort((a, b) => a.date.localeCompare(b.date)).map((c) => html`<li><${Logo} r=${{ name: c.s.name, tone: c.s.tone }} size="sm" /><span class="grow"><b>${c.s.name}</b><span class="small c3">${c.p.label} · renews ${fmt(c.date)}</span></span><span class="small cb">🔔 ${fmt(R.iso(R.addDays(R.parse(c.date), -7)) < R.iso(R.today()) ? R.iso(R.today()) : R.iso(R.addDays(R.parse(c.date), -7)))}</span></li>`)}</ul>`}
+    ${added.length > 0 && html`<ul class="onb3-sum">${added.slice().sort((a, b) => a.date.localeCompare(b.date)).map((c) => html`<li><${Logo} r=${{ name: c.s.name, tone: c.s.tone }} size="sm" /><span class="grow"><b>${c.s.name}</b><span class="small c3">${c.p.label} · renews ${fmt(c.date)}</span></span><span class="small cb onb3-when" title="First reminder">${fmt(R.iso(R.addDays(R.parse(c.date), -7)) < R.iso(R.today()) ? R.iso(R.today()) : R.iso(R.addDays(R.parse(c.date), -7)))}</span></li>`)}</ul>`}
     <ol class="onb3-flow" aria-label="How it works"><li><span class="t-brand">🔔</span>We remind you 7 days before</li><li><span class="t-amber">🤔</span>Keep, cancel or decide later</li><li><span class="t-green">✅</span>No surprise charges</li></ol>`;
 
   const backBtn = html`<${Btn} v="secondary" icon="chevron-left" onClick=${back}>Back<//>`;
