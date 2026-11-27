@@ -660,7 +660,17 @@ function Login({ ctx, mode = 'login' }) {
   const fail = (e) => { const m = ctx.auth.friendly(e); if (m) setErr({ form: m }); };
   const enter = (which) => {
     setErr({});
-    if (which === 'google' && real) { setLoading('google'); ctx.auth.google().catch(fail).finally(() => setLoading(null)); return; }
+    if (which === 'google' && real) {
+      // Closing the Google window: Firebase only reports it after a long wait (often ~8 s). When the
+      // person is back on this page and nothing has finished a moment later, stop the spinner at once.
+      // (If sign-in did go through, it still completes and opens the app.)
+      setLoading('google'); let done = false;
+      const off = () => { window.removeEventListener('focus', back); document.removeEventListener('visibilitychange', back); };
+      const back = () => { if (document.visibilityState === 'hidden') return; setTimeout(() => { if (!done) { off(); setLoading(null); } }, 1200); };
+      setTimeout(() => { if (!done) { window.addEventListener('focus', back); document.addEventListener('visibilitychange', back); } }, 400);
+      ctx.auth.google().catch(fail).finally(() => { done = true; off(); setLoading(null); });
+      return;
+    }
     setLoading(which); setTimeout(() => (which === 'google' ? ctx.signIn('new', 'olena.shevchenko@gmail.com') : ctx.signIn('demo')), 800);
   };
   const submit = (e) => {
