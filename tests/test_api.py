@@ -315,3 +315,9 @@ class CurrencyTests(unittest.TestCase):
         users = d.merge_users({"a": {"currency": "EUR"}, "b": {}}, [("a", {"id": "x", "name": "N"}), ("b", {"id": "y", "name": "M"})])
         cur = {uid: rs[0]["currency"] for uid, rs, _ in users}
         self.assertEqual(cur, {"a": "EUR", "b": "USD"})
+
+    def test_daily_job_keeps_each_reminders_own_currency(self):
+        users = d.merge_users({"a": {"currency": "EUR"}}, [("a", {"id": "x", "name": "N", "currency": "UAH"}),
+                                                          ("a", {"id": "y", "name": "M"}), ("a", {"id": "z", "name": "K", "currency": "GBP"})])
+        cur = {r["id"]: r["currency"] for _, rs, _ in users for r in rs}
+        self.assertEqual(cur, {"x": "UAH", "y": "EUR", "z": "EUR"})  # own currency; none or unknown → the profile's

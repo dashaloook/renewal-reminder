@@ -63,6 +63,13 @@
     return Math.round((n * RATES[from]) / RATES[to] * 100) / 100;
   };
 
+  // Each reminder has its own currency (r.currency); totals are shown in the main currency
+  // (the profile's), converted at today's rate. Old reminders without one are in the main currency.
+  let MAIN = 'USD';
+  const setMain = (c) => { MAIN = c; };
+  const curOf = (r) => r.currency || MAIN;
+  const inMain = (r) => convert(r.amount, curOf(r), MAIN);
+
   const P = (usd, eur, uah) => ({ USD: usd, EUR: eur, UAH: uah });
   const TEMPLATES = [
     { name: 'Netflix', group: 'Video & music', url: 'https://www.netflix.com/cancelplan', category: 'subscription', cycle: 'monthly', tone: 'rose', prices: P(17.99, 13.99, 279) },
@@ -135,10 +142,11 @@
     return out;
   }
   const isActive = (r) => r.status !== 'cancelled';
-  const monthlyEq = (r) => !isActive(r) ? 0 : r.cycle === 'weekly' ? r.amount * 52 / 12 : r.cycle === 'monthly' ? r.amount : r.cycle === 'yearly' ? r.amount / 12 : 0;
+  // own = in the reminder's own currency; otherwise in the main currency.
+  const monthlyEq = (r, own) => { if (!isActive(r)) return 0; const a = own ? Number(r.amount) || 0 : inMain(r); return r.cycle === 'weekly' ? a * 52 / 12 : r.cycle === 'monthly' ? a : r.cycle === 'yearly' ? a / 12 : 0; };
   const yearly = (r) => {
     if (!isActive(r)) return 0;
-    if (r.cycle === 'one-time') { const n = daysUntil(r.date); return n >= 0 && n <= 365 ? r.amount : 0; }
+    if (r.cycle === 'one-time') { const n = daysUntil(r.date); return n >= 0 && n <= 365 ? inMain(r) : 0; }
     return monthlyEq(r) * 12;
   };
   function analytics(list) {
@@ -151,10 +159,10 @@
     for (let i = 0; i < 6; i++) {
       const start = i === 0 ? t : new Date(t.getFullYear(), t.getMonth() + i, 1);
       const end = new Date(t.getFullYear(), t.getMonth() + i + 1, 0);
-      const value = list.reduce((s, r) => s + occurrences(r, start, end).length * r.amount, 0);
+      const value = list.reduce((s, r) => s + occurrences(r, start, end).length * inMain(r), 0);
       months.push({ label: start.toLocaleDateString('en-GB', { month: 'short' }), long: start.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }), start: iso(start), value });
     }
-    return { month, year, next30Count: next30.length, next30Sum: next30.reduce((s, x) => s + x.r.amount, 0), byCat, months };
+    return { month, year, next30Count: next30.length, next30Sum: next30.reduce((s, x) => s + inMain(x.r), 0), byCat, months };
   }
 
   // roll recurring dates forward if the stored demo is older than today
@@ -167,5 +175,5 @@
     });
   }
 
-  window.RR = { DAY, today, iso, parse, addDays, addMonths, daysUntil, off, USER, CATEGORIES, CYCLES, REASONS, TONES, TEMPLATES, priceOf, RATES, convert, seedReminders, occurrences, analytics, monthlyEq, yearly, isActive, rollForward, SEED_STATS: { onTime: 7, total: 8 } };
+  window.RR = { DAY, today, iso, parse, addDays, addMonths, daysUntil, off, USER, CATEGORIES, CYCLES, REASONS, TONES, TEMPLATES, priceOf, RATES, convert, setMain, curOf, inMain, seedReminders, occurrences, analytics, monthlyEq, yearly, isActive, rollForward, SEED_STATS: { onTime: 7, total: 8 } };
 })();

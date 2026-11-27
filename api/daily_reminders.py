@@ -128,7 +128,9 @@ def merge_users(profiles, reminder_docs):
         merged = {r["id"]: r for r in (fields.get("reminders") or []) if isinstance(r, dict) and r.get("id")}
         merged.update(per.get(uid, {}))
         cur = fields.get("currency") if fields.get("currency") in ("USD", "EUR", "UAH") else "USD"
-        out.append((uid, [{**r, "currency": cur} for r in merged.values()], fields.get("push") or []))
+        # Each reminder may have its own currency; older ones use the profile's main currency.
+        out.append((uid, [{**r, "currency": r.get("currency") if r.get("currency") in ("USD", "EUR", "UAH") else cur}
+                          for r in merged.values()], fields.get("push") or []))
     return out
 
 

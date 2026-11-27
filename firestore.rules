@@ -29,7 +29,8 @@ service cloud.firestore {
         allow create, update: if isOwner(userId)
           && reminderId.size() <= 80
           && request.resource.data.keys().hasOnly(['id', 'name', 'category', 'amount', 'cycle', 'date', 'remind', 'channel', 'link', 'note',
-                                                   'status', 'reason', 'followUp', 'tone', 'history', 'emailedOn', 'updatedAt'])
+                                                   'status', 'reason', 'followUp', 'tone', 'history', 'emailedOn', 'updatedAt', 'currency'])
+          && (!('currency' in request.resource.data) || request.resource.data.currency in ['USD', 'EUR', 'UAH'])
           && request.resource.data.id == reminderId
           && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
           && request.resource.data.date is string && request.resource.data.date.size() == 10

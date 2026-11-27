@@ -43,6 +43,12 @@ test('profile rejects unknown fields and more than 5 push devices', async () => 
   await assertSucceeds(setDoc(doc(alice(), 'users/alice'), { push: six.slice(0, 5) }));
 });
 
+test('a reminder may have its own currency: USD, EUR or UAH', async () => {
+  const rec = (c) => ({ id: 'r1', name: 'Megogo', date: '2026-12-01', currency: c });
+  for (const c of ['USD', 'EUR', 'UAH']) await assertSucceeds(setDoc(doc(alice(), 'users/alice/reminders/r1'), rec(c)));
+  await assertFails(setDoc(doc(alice(), 'users/alice/reminders/r1'), rec('GBP')));
+});
+
 test('profile currency must be USD, EUR or UAH', async () => {
   for (const c of ['USD', 'EUR', 'UAH']) await assertSucceeds(setDoc(doc(alice(), 'users/alice'), { currency: c }));
   await assertFails(setDoc(doc(alice(), 'users/alice'), { currency: 'GBP' }));
