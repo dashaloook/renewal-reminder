@@ -397,11 +397,25 @@ def test_currency_defaults_to_dollars_and_can_switch(page: Page, base_url, error
     page.get_by_role("button", name="Let’s find yours").click()
     cur = page.get_by_role("radiogroup", name="Currency")
     expect(cur.get_by_role("radio", name="US dollar")).to_have_attribute("aria-checked", "true")
+    expect(page.locator(".cur-rate")).to_contain_text("₴40.00")                # today's rate is shown
+    expect(page.locator(".onb3-svc.on")).to_contain_text("$17.99")             # Netflix Standard
     cur.get_by_role("radio", name="Hryvnia").click()
     expect(cur.get_by_role("radio", name="Hryvnia")).to_have_attribute("aria-checked", "true")
+    expect(page.locator(".onb3-svc.on")).to_contain_text("₴719.60")            # 17.99 × 40, not the same number
     page.get_by_role("button", name="Add 1 reminder").click()
     page.get_by_role("button", name="Go to my dashboard").click()
-    page.goto(base_url + "/#/reminders")
-    expect(find(page, "Netflix").first).to_contain_text("₴")
+    expect(find(page, "Spotify Family").first).to_contain_text("₴719.60")      # saved $17.99 converted too
     page.goto(base_url + "/#/new")
     expect(page.locator("label", has_text="UAH")).to_have_count(1)    # amount field shows the currency
+
+
+def test_switching_currency_converts_saved_amounts_and_can_undo(page: Page, base_url, errors):
+    start_demo(page, base_url)
+    page.set_viewport_size({"width": 1280, "height": 900})
+    expect(find(page, "Spotify Family").first).to_contain_text("$17.99")
+    page.locator(".profile-btn").click()
+    page.get_by_role("radiogroup", name="Currency").get_by_role("radio", name="Euro").click()
+    expect(page.locator(".toast")).to_contain_text("Amounts converted to € EUR")
+    expect(page.locator(".rrow", has_text="Spotify Family")).to_contain_text("€14.39")   # 17.99 × 40 / 50
+    page.locator(".toast").get_by_role("button", name="Undo").click()
+    expect(page.locator(".rrow", has_text="Spotify Family")).to_contain_text("$17.99")   # back as it was

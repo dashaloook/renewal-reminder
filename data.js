@@ -33,8 +33,36 @@
   const TONES = ['rose', 'sky', 'lavender', 'yellow', 'peach'];
 
   // Services people in Ukraine and elsewhere actually pay for (Disney+ and the Amazon Prime membership
-  // aren't offered in Ukraine). prices = typical list prices per currency — estimates, editable.
+  // aren't offered in Ukraine). prices = typical list prices; only the one in `base` (USD, or UAH for Ukrainian services) is used, the rest come from today's exchange rate.
   // group = how the onboarding list is organised; the first 6 are the Quick start chips.
+
+  // ---------- exchange rates ----------
+  // RATES[c] = how many hryvnias 1 unit of c is worth. Official National Bank of Ukraine rate
+  // (updated daily, no key needed); open.er-api.com as a backup; the values below if both are offline.
+  // Kept for 12 hours in this browser. When rates arrive, 'rr-rates' is sent so the screen redraws.
+  const RATES = { USD: 45.02, EUR: 49.35, UAH: 1, date: '2026-11-30', src: 'built-in' };
+  const RATE_KEY = 'rr-rates';
+  const setRates = (r) => { Object.assign(RATES, r); try { window.dispatchEvent(new Event('rr-rates')); } catch (e) {} };
+  const ok = (n) => typeof n === 'number' && n > 0 && isFinite(n);
+  (async function loadRates() {
+    try { const c = JSON.parse(localStorage.getItem(RATE_KEY) || 'null'); if (c && Date.now() - c.at < 12 * 3600e3 && ok(c.USD) && ok(c.EUR)) { setRates(c); return; } } catch (e) {}
+    const save = (r) => { setRates(r); try { localStorage.setItem(RATE_KEY, JSON.stringify({ ...r, at: Date.now() })); } catch (e) {} };
+    try {
+      const list = await (await fetch('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json')).json();
+      const get = (cc) => (list.find((x) => x.cc === cc) || {}).rate;
+      if (ok(get('USD')) && ok(get('EUR'))) { const [dd, mm, yy] = String(list[0].exchangedate || '').split('.'); return save({ USD: get('USD'), EUR: get('EUR'), date: yy ? `${yy}-${mm}-${dd}` : RATES.date, src: 'NBU' }); }
+    } catch (e) {}
+    try {
+      const j = await (await fetch('https://open.er-api.com/v6/latest/USD')).json();
+      if (ok(j.rates.UAH) && ok(j.rates.EUR)) return save({ USD: j.rates.UAH, EUR: j.rates.UAH / j.rates.EUR, date: new Date(j.time_last_update_unix * 1000).toISOString().slice(0, 10), src: 'open.er-api.com' });
+    } catch (e) {}
+  })();
+  // Converts an amount between USD / EUR / UAH at today's rate, rounded to cents.
+  const convert = (n, from, to) => {
+    n = Number(n) || 0; if (!n || from === to || !RATES[from] || !RATES[to]) return n;
+    return Math.round((n * RATES[from]) / RATES[to] * 100) / 100;
+  };
+
   const P = (usd, eur, uah) => ({ USD: usd, EUR: eur, UAH: uah });
   const TEMPLATES = [
     { name: 'Netflix', group: 'Video & music', url: 'https://www.netflix.com/cancelplan', category: 'subscription', cycle: 'monthly', tone: 'rose', prices: P(17.99, 13.99, 279) },
@@ -43,9 +71,9 @@
     { name: 'ChatGPT Plus', group: 'AI', url: 'https://help.openai.com/en/articles/7232927', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(20, 23, 849) },
     { name: 'Telegram Premium', group: 'Social', url: 'https://telegram.org/faq_premium', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(4.99, 4.99, 209) },
     { name: 'iCloud+', group: 'Cloud & tools', url: 'https://support.apple.com/HT207594', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(2.99, 2.99, 109) },
-    { name: 'Megogo', group: 'Video & music', url: 'https://megogo.net/ua/subscriptions', category: 'subscription', cycle: 'monthly', tone: 'lavender', prices: P(2.99, 2.99, 99) },
-    { name: 'Kyivstar TV', group: 'Video & music', url: 'https://tv.kyivstar.ua', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(2.49, 2.29, 99) },
-    { name: 'Sweet.tv', group: 'Video & music', url: 'https://sweet.tv', category: 'subscription', cycle: 'monthly', tone: 'peach', prices: P(1.49, 1.39, 49) },
+    { name: 'Megogo', base: 'UAH', group: 'Video & music', url: 'https://megogo.net/ua/subscriptions', category: 'subscription', cycle: 'monthly', tone: 'lavender', prices: P(2.99, 2.99, 99) },
+    { name: 'Kyivstar TV', base: 'UAH', group: 'Video & music', url: 'https://tv.kyivstar.ua', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(2.49, 2.29, 99) },
+    { name: 'Sweet.tv', base: 'UAH', group: 'Video & music', url: 'https://sweet.tv', category: 'subscription', cycle: 'monthly', tone: 'peach', prices: P(1.49, 1.39, 49) },
     { name: 'Prime Video', group: 'Video & music', url: 'https://www.primevideo.com/settings', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(8.99, 4.99, 215) },
     { name: 'Claude', group: 'AI', url: 'https://claude.ai/settings/billing', category: 'subscription', cycle: 'monthly', tone: 'peach', prices: P(20, 18, 829) },
     { name: 'Meta Verified', group: 'Social', url: 'https://accountscenter.meta.com/meta_verified', category: 'subscription', cycle: 'monthly', tone: 'sky', prices: P(14.99, 13.99, 619) },
@@ -59,7 +87,8 @@
     { name: 'Tax return', category: 'document', cycle: 'yearly', tone: 'yellow', prices: P(0, 0, 0) },
   ];
   // Price of a template in the account's currency (US dollars by default).
-  const priceOf = (t, cur) => (t && t.prices ? (t.prices[cur] ?? t.prices.USD) : (t && t.amount) || 0);
+  // Each service has one real list price in its own currency (base: USD, or UAH for Ukrainian services); other currencies are converted at today's rate.
+  const priceOf = (t, cur) => { if (!t || !t.prices) return (t && t.amount) || 0; const b = t.base || 'USD'; return convert(t.prices[b], b, cur || 'USD'); };
 
   // offset = days from today to next charge / expiry
   const RAW = [
@@ -138,5 +167,5 @@
     });
   }
 
-  window.RR = { DAY, today, iso, parse, addDays, addMonths, daysUntil, off, USER, CATEGORIES, CYCLES, REASONS, TONES, TEMPLATES, priceOf, seedReminders, occurrences, analytics, monthlyEq, yearly, isActive, rollForward, SEED_STATS: { onTime: 7, total: 8 } };
+  window.RR = { DAY, today, iso, parse, addDays, addMonths, daysUntil, off, USER, CATEGORIES, CYCLES, REASONS, TONES, TEMPLATES, priceOf, RATES, convert, seedReminders, occurrences, analytics, monthlyEq, yearly, isActive, rollForward, SEED_STATS: { onTime: 7, total: 8 } };
 })();

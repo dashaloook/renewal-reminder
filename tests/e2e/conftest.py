@@ -48,3 +48,14 @@ def errors(page):
     page.on("pageerror", lambda e: found.append(str(e)))
     yield found
     assert not found, f"JavaScript errors: {found}"
+
+
+@pytest.fixture(autouse=True)
+def fixed_exchange_rates(page):
+    """Same exchange rates in every run: $1 = ₴40, €1 = ₴50 (the National Bank of Ukraine answer is faked)."""
+    import json
+    nbu = [{"cc": "USD", "rate": 40, "exchangedate": "30.11.2026"}, {"cc": "EUR", "rate": 50, "exchangedate": "30.11.2026"}]
+    page.route("https://bank.gov.ua/**", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                            headers={"Access-Control-Allow-Origin": "*"}, body=json.dumps(nbu)))
+    page.route("https://open.er-api.com/**", lambda r: r.abort())
+    yield
