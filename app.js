@@ -155,6 +155,8 @@ const go = (p) => { location.hash = '#/' + p; };
 function App() {
   const [state, setState] = useState(() => { const s = load(); return s ? { ...s, reminders: R.rollForward(s.reminders) } : freshState(); });
   const [toast, setToast] = useState(null);
+  const [, setRatesTick] = useState(0);  // redraw when today's exchange rates arrive
+  useEffect(() => { const f = () => setRatesTick((t) => t + 1); window.addEventListener('rr-rates', f); return () => window.removeEventListener('rr-rates', f); }, []);
   const [drawer, setDrawer] = useState(null);
   const [later, setLater] = useState(null);
   const [confirm, setConfirm] = useState(null);
@@ -443,8 +445,20 @@ function Shell({ ctx, page, children }) {
 
 // $ / € / ₴ — one setting per account, saved with the profile.
 function CurrencySwitch({ ctx, compact }) {
-  return html`<div class=${'cur-switch' + (compact ? ' compact' : '')}><span class="small c2" id="cur-l">Currency</span>
-    <div class="seg" role="radiogroup" aria-labelledby="cur-l">${CURRENCIES.map(([code, sym, label]) => html`<button type="button" role="radio" aria-checked=${CUR === code} aria-label=${label} title=${label} onClick=${() => ctx.update(() => ({ currency: code }))}>${sym} ${code}</button>`)}</div></div>`;
+  // Switching converts every saved amount at today's rate (undo restores the old amounts).
+  const pick = (code) => {
+    const from = CUR; if (code === from) return;
+    const before = { currency: ctx.state.currency, reminders: ctx.state.reminders };
+    ctx.update((s) => ({ currency: code, reminders: s.reminders.map((r) => (Number(r.amount) ? { ...r, amount: R.convert(r.amount, from, code) } : r)) }));
+    const n = ctx.state.reminders.filter((r) => Number(r.amount)).length;
+    if (n) ctx.showToast(`Amounts converted to ${curSym(code)} ${code}`, `${n} reminder${n === 1 ? '' : 's'} at today’s rate. You can undo for 6 seconds.`, before);
+  };
+  const r = R.RATES; const two = (x) => x.toFixed(2);
+  const rate = CUR === 'UAH' ? `$1 = ₴${two(r.USD)} · €1 = ₴${two(r.EUR)}` : CUR === 'EUR' ? `€1 = $${two(r.EUR / r.USD)} · ₴${two(r.EUR)}` : `$1 = €${two(r.USD / r.EUR)} · ₴${two(r.USD)}`;
+  const lid = compact ? 'cur-lm' : 'cur-l';
+  return html`<div class=${'cur-switch' + (compact ? ' compact' : '')}><span class="small c2" id=${lid}>Currency</span>
+    <div class="seg" role="radiogroup" aria-labelledby=${lid}>${CURRENCIES.map(([code, sym, label]) => html`<button type="button" role="radio" aria-checked=${CUR === code} aria-label=${label} title=${label} onClick=${() => pick(code)}>${sym} ${code}</button>`)}</div>
+    <span class="small c3 cur-rate" title=${r.src === 'NBU' ? 'Official rate of the National Bank of Ukraine' : r.src === 'built-in' ? 'Offline: approximate rate' : 'Exchange rate from ' + r.src}>${rate} · ${r.src === 'NBU' ? 'NBU' : r.src === 'built-in' ? 'approx.' : 'market'}, ${fmt(r.date, { day: 'numeric', month: 'short' })}</span></div>`;
 }
 
 // Phones: the profile menu opens as a bottom sheet (the sidebar menu is used on wider screens).
@@ -519,9 +533,9 @@ const ONB = [
   { name: 'Netflix', group: 'Video & music', plans: [['Basic', P3(7.99, 5.99, 199)], ['Standard', P3(17.99, 13.99, 279)], ['Premium', P3(24.99, 19.99, 359)]], def: 1, days: 6 },
   { name: 'YouTube Premium', group: 'Video & music', plans: [['Individual', P3(13.99, 12.99, 99)], ['Family', P3(22.99, 25.99, 179)]], def: 0, days: 15 },
   { name: 'Spotify', group: 'Video & music', plans: [['Individual', P3(11.99, 10.99, 169)], ['Duo', P3(16.99, 14.99, 229)], ['Family', P3(19.99, 17.99, 269)]], def: 0, days: 12 },
-  { name: 'Megogo', group: 'Video & music', plans: [['Light', P3(2.99, 2.99, 99)], ['Maximum', P3(6.99, 6.49, 249)]], def: 0, days: 10 },
-  { name: 'Kyivstar TV', group: 'Video & music', plans: [['Basic', P3(2.49, 2.29, 99)], ['Premium', P3(5.99, 5.59, 249)]], def: 0, days: 13 },
-  { name: 'Sweet.tv', group: 'Video & music', plans: [['Start', P3(1.49, 1.39, 49)], ['Max', P3(4.99, 4.69, 199)]], def: 0, days: 16 },
+  { name: 'Megogo', base: 'UAH', group: 'Video & music', plans: [['Light', P3(2.99, 2.99, 99)], ['Maximum', P3(6.99, 6.49, 249)]], def: 0, days: 10 },
+  { name: 'Kyivstar TV', base: 'UAH', group: 'Video & music', plans: [['Basic', P3(2.49, 2.29, 99)], ['Premium', P3(5.99, 5.59, 249)]], def: 0, days: 13 },
+  { name: 'Sweet.tv', base: 'UAH', group: 'Video & music', plans: [['Start', P3(1.49, 1.39, 49)], ['Max', P3(4.99, 4.69, 199)]], def: 0, days: 16 },
   { name: 'Prime Video', group: 'Video & music', plans: [['Monthly', P3(8.99, 4.99, 215)]], def: 0, days: 22 },
   { name: 'ChatGPT', tpl: 'ChatGPT Plus', group: 'AI', plans: [['Plus', P3(20, 23, 849)], ['Pro', P3(200, 229, 8299)]], def: 0, days: 17 },
   { name: 'Claude', group: 'AI', plans: [['Pro', P3(20, 18, 829)], ['Max 5×', P3(100, 90, 4149)], ['Max 20×', P3(200, 180, 8299)]], def: 0, days: 19 },
@@ -536,7 +550,7 @@ const ONB = [
 const ONB_GROUPS = ['Video & music', 'AI', 'Social', 'Cloud & tools'];
 const onbTone = (s) => (R.TEMPLATES.find((t) => t.name === (s.tpl || s.name)) || {}).tone || 'lavender';
 const ONB_DEFAULT = [ONB[0].name]; // only the first service is preselected
-const onbPlan = (s, i) => { const [label, prices, cycle] = s.plans[i]; return { label, amount: prices[CUR] ?? prices.USD, cycle: cycle || 'monthly' }; };
+const onbPlan = (s, i) => { const [label, prices, cycle] = s.plans[i]; const b = s.base || 'USD'; return { label, amount: R.convert(prices[b], b, CUR), cycle: cycle || 'monthly' }; };
 const perMonth = (p) => (p.cycle === 'yearly' ? p.amount / 12 : p.amount);
 
 function Onboarding({ ctx }) {

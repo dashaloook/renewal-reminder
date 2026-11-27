@@ -657,7 +657,8 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
 .logo.sm.topic-logo .icon{width:16px;height:16px}.logo.lg.topic-logo .icon{width:24px;height:24px}
 
 /* Currency switch ($ / € / ₴) — profile sheet, profile menu, onboarding */
-.cur-switch{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.cur-switch{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 12px}
+.cur-switch .cur-rate{flex-basis:100%;font-size:12px}
 .cur-switch .seg{flex:none}
 .cur-switch .seg button{padding:6px 10px;font-size:14px;min-height:36px}
 .cur-switch.compact{padding:6px 8px}
