@@ -669,3 +669,7 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
 /* amount with its own currency */
 .amount-row{display:flex;gap:8px;align-items:stretch}
 .amount-row .cur-select{width:auto;flex:none;padding-right:28px}
+
+/* language switch on the log in screen */
+.login-lang{display:flex;justify-content:center}
+.login-lang .cur-switch{justify-content:center}

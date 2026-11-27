@@ -46,11 +46,12 @@
   }
 
   // Buttons inside the notification (Chrome/Edge show up to 2; Safari shows none, so clicking opens the app).
-  const ACTIONS = [{ action: 'keep', title: 'Keep it' }, { action: 'later', title: 'Decide later' }];
+  const tr = (s) => (window.RRI18n ? window.RRI18n.t(s) : s);
+  const ACTIONS = () => [{ action: 'keep', title: tr('Keep it') }, { action: 'later', title: tr('Decide later') }];
   async function show(title, body, tag, reminderId) {
     if (permission() !== 'granted') return false;
     const opts = { body, icon: '/icons/icon-192.png', badge: '/icons/badge-96.png', tag: tag || 'test', requireInteraction: !!reminderId,
-      data: { url: '/#/dashboard', id: reminderId || null }, ...(reminderId ? { actions: ACTIONS } : {}) };
+      data: { url: '/#/dashboard', id: reminderId || null }, ...(reminderId ? { actions: ACTIONS() } : {}) };
     try { const reg = await registration(); await reg.showNotification(title, opts); return true; }
     catch (e) { try { new Notification(title, { body, icon: '/icons/icon-192.png', badge: '/icons/badge-96.png' }); return true; } catch (x) { return false; } }
   }

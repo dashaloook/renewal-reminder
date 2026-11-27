@@ -51,6 +51,14 @@ def errors(page):
 
 
 @pytest.fixture(autouse=True)
+def english_by_default(page):
+    """The app opens in Ukrainian; these tests read English labels, so they start in English
+    (a test can still switch language — this only sets it when nothing is chosen yet)."""
+    page.add_init_script("try{if(!localStorage.getItem('rr-lang'))localStorage.setItem('rr-lang','en')}catch(e){}")
+    yield
+
+
+@pytest.fixture(autouse=True)
 def fixed_exchange_rates(page):
     """Same exchange rates in every run: $1 = ₴40, €1 = ₴50 (the National Bank of Ukraine answer is faked)."""
     import json
