@@ -52,6 +52,14 @@ def _rate_limited(ip, now=None):
     return False
 
 
+CURRENCIES = {"USD": "$", "EUR": "€", "UAH": "₴"}
+
+
+def money_str(amount, currency=None):
+    """$12.99 / €12.99 / ₴199.00 — the account's currency, US dollars by default."""
+    return f"{CURRENCIES.get(currency or 'USD', '$')}{amount:,.2f}"
+
+
 def _validate(data):
     """Return (clean_reminder, None) or (None, error_message)."""
     if not isinstance(data, dict):
@@ -79,7 +87,10 @@ def _validate(data):
     rid = r.get("id")
     if rid is not None and (not isinstance(rid, str) or not ID_RE.match(rid)):
         return None, "Unknown reminder id."
-    return {"name": name.strip(), "date": date, "amount": float(amount), "cycle": cycle, "daysLeft": days, "id": rid}, None
+    currency = r.get("currency", "USD")
+    if currency not in CURRENCIES:
+        return None, "Unknown currency."
+    return {"name": name.strip(), "date": date, "amount": float(amount), "cycle": cycle, "daysLeft": days, "id": rid, "currency": currency}, None
 
 
 def _when(days):
@@ -117,7 +128,7 @@ def build_email(r):
     name = html.escape(r["name"])
     when = _when(r["daysLeft"])
     per = CYCLES[r["cycle"]]
-    price = f"€{r['amount']:.2f}" + (f" / {per}" if per and r["amount"] else "")
+    price = money_str(r["amount"], r.get("currency")) + (f" / {per}" if per and r["amount"] else "")
     day = _nice_date(r["date"])
     # The charge date in the subject keeps different reminders apart in Gmail.
     subject = f"Reminder: {r['name']} renews {when or 'soon'} ({day})"[:120]

@@ -4,7 +4,12 @@ const html = htm.bind(React.createElement);
 const R = window.RR;
 
 // ---------- helpers ----------
-const money = (n) => '€' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Money in the account's currency: US dollars by default; € and ₴ on request. Amounts are not converted —
+// people enter them in their own currency.
+const CURRENCIES = [['USD', '$', 'US dollar'], ['EUR', '€', 'Euro'], ['UAH', '₴', 'Hryvnia']];
+let CUR = 'USD';
+const curSym = (c = CUR) => (CURRENCIES.find((x) => x[0] === c) || CURRENCIES[0])[1];
+const money = (n) => curSym() + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Notification wording (same rules as the server's daily job, api/daily_reminders.py).
 const notifCopy = (r, followUp) => {
   const n = R.daysUntil(r.date); const name = r.name;
@@ -36,6 +41,10 @@ const amountLine = (r) => r.amount ? `${money(r.amount)}${cyc(r.cycle).per ? ' /
 
 // ---------- icons (Lucide paths) ----------
 const P = {
+  scale: '<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/>',
+  'calendar-plus': '<path d="M16 19h6"/><path d="M16 2v4"/><path d="M19 16v6"/><path d="M21 12.6V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8.5"/><path d="M3 10h18"/><path d="M8 2v4"/>',
+  'bell-ring': '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M22 8c0-2.3-.8-4.3-2-6"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/><path d="M4 2C2.8 3.7 2 5.7 2 8"/>',
+  'circle-x': '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
   dumbbell: '<path d="m6.5 6.5 11 11"/><path d="m21 21-1-1"/><path d="m3 3 1 1"/><path d="m18 22 4-4"/><path d="m2 6 4-4"/><path d="m3 10 7-7"/><path d="m14 21 7-7"/>',
   wifi: '<path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.86a10 10 0 0 1 14 0"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/>',
   droplet: '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
@@ -48,10 +57,11 @@ const P = {
   house: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   'shield-plain': '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
   'credit-card': '<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>',
+  tv: '<path d="m17 2-5 5-5-5"/><rect width="20" height="15" x="2" y="7" rx="2"/>',
   receipt: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/>',
   'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>', search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
-  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  bell: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
   'bell-off': '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/>',
   dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
   list: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
@@ -69,7 +79,7 @@ const P = {
   alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
-  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  trash: '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   note: '<path d="M8 2v4"/><path d="M12 2v4"/><path d="M16 2v4"/><path d="M11 22H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5"/><path d="M4 9h16"/><path d="M8 13h6"/><path d="M8 17h3"/><path d="M21.4 14.6a1.5 1.5 0 0 0-2.1-2.1L14 17.8V20h2.2z"/>',
   pencil: '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
   lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
@@ -77,7 +87,7 @@ const P = {
   'circle-check': '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
   range: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 2v4"/><path d="M17 14h-6"/><path d="M13 18H7"/>',
 };
-const Icon = ({ n, c = '', label, style }) => html`<svg class=${'icon ' + c} style=${style} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden=${label ? undefined : 'true'} role=${label ? 'img' : undefined} aria-label=${label} dangerouslySetInnerHTML=${{ __html: P[n] || '' }}></svg>`;
+const Icon = ({ n, c = '', label, style }) => html`<svg class=${'icon ' + c} style=${style} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden=${label ? undefined : 'true'} role=${label ? 'img' : undefined} aria-label=${label} dangerouslySetInnerHTML=${{ __html: P[n] || '' }}></svg>`;
 
 // Real accounts (Firebase): signed in with Google or with email + password.
 const isCloud = (a) => a === 'google' || a === 'email';
@@ -89,14 +99,15 @@ const ServiceLink = ({ r }) => r.link
   : html`<a class="link" href=${'#/edit/' + r.id}>Add a cancel link<${Icon} n="plus" c="xs" /></a>`;
 // Real brand logos for well-known services (logos/, from Simple Icons, CC0); everything else keeps its letter.
 const BRANDS = [[/^netflix/, 'netflix'], [/^spotify/, 'spotify'], [/^(chatgpt|openai)/, 'chatgpt'], [/^claude/, 'claude'], [/^icloud/, 'icloud'],
-  [/^youtube/, 'youtube'], [/^amazon prime|^prime video/, 'amazonprime'], [/^adobe/, 'adobe']];
+  [/^youtube/, 'youtube'], [/^amazon prime|^prime video/, 'amazonprime'], [/^adobe/, 'adobe'], [/^telegram/, 'telegram'],
+  [/^meta verified|^instagram|^facebook/, 'meta'], [/^x premium|^twitter|^x \(/, 'x'], [/^snapchat/, 'snapchat'], [/^google one/, 'googleone']];
 const brandOf = (name) => { const n = String(name || '').trim().toLowerCase(); const b = BRANDS.find(([re]) => re.test(n)); return b ? b[1] : null; };
 // No brand logo? A fitting icon by keywords in the name, else by category (unknown subscriptions keep their letter).
-const TOPICS = [[/\btax|\bvat\b|accountant|bookkeep/, 'receipt'], [/passport|visa/, 'passport'], [/\bgym|fitness|\bsports?\b|yoga|pilates|swim/, 'dumbbell'], [/internet|wi-?fi|broadband|fibre|fiber/, 'wifi'], [/water/, 'droplet'],
+const TOPICS = [[/megogo|sweet\.?tv|kyivstar|\btv\b|streaming/, 'tv'], [/\btax|\bvat\b|accountant|bookkeep/, 'receipt'], [/passport|visa/, 'passport'], [/\bgym|fitness|\bsports?\b|yoga|pilates|swim/, 'dumbbell'], [/internet|wi-?fi|broadband|fibre|fiber/, 'wifi'], [/water/, 'droplet'],
   [/electric|power|energy|\bgas\b|heating/, 'zap'], [/phone|mobile|\bsim\b|cellular/, 'smartphone'], [/car\b|vehicle|parking|\bauto|inspection|\bmot\b/, 'car'],
   [/licen[cs]e|driver|\bid\b|identity/, 'id-card'], [/health|medical|dental|doctor|clinic/, 'heart-pulse'],
   [/rent|mortgage|home|house|flat|apartment/, 'house']];
-const TOPIC_COLOR = { dumbbell: '#E8590C', wifi: '#1971C2', droplet: '#0C8599', zap: '#E67700', smartphone: '#6741D9', car: '#2F9E44',
+const TOPIC_COLOR = { tv: '#C2255C', dumbbell: '#E8590C', wifi: '#1971C2', droplet: '#0C8599', zap: '#E67700', smartphone: '#6741D9', car: '#2F9E44',
   'id-card': '#7048E8', passport: '#364FC7', 'heart-pulse': '#E03131', house: '#2B8A3E', receipt: '#087F5B', 'shield-plain': '#1864AB', 'credit-card': '#3B5BDB', 'file-text': '#495057' };
 const CAT_ICON = { payment: 'credit-card', insurance: 'shield-plain', document: 'file-text', household: 'house' };
 const topicOf = (r) => { const n = String(r.name || '').toLowerCase(); const t = TOPICS.find(([re]) => re.test(n)); return t ? t[1] : CAT_ICON[r.category] || null; };
@@ -228,6 +239,7 @@ function App() {
 
   Object.assign(R.USER, { photo: '' }, state.user || DEMO_USER);
   R.CLOUD_ACCOUNT = isCloud(state.account);
+  CUR = CURRENCIES.some((c) => c[0] === state.currency) ? state.currency : 'USD'; window.RR_CUR = CUR;
   const reminders = QS === 'empty' ? [] : state.reminders;
   // Notifications count as "on" only if the browser really allows them on this device.
   const pushApi = window.RRPush;
@@ -402,7 +414,8 @@ function Shell({ ctx, page, children }) {
   const toggleSide = () => setCollapsed((c) => { try { localStorage.setItem(SIDE_KEY, c ? '0' : '1'); } catch (e) { /* per-viewer convenience only */ } setMenu(false); return !c; });
   const active = page === 'dashboard' ? 'dashboard' : 'reminders';
   useEffect(() => { if (!menu) return; const k = (e) => e.key === 'Escape' && setMenu(false); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [menu]);
-  const Menu = () => html`<div class="menu" role="menu" style=${{ minWidth: 200 }}>
+  const Menu = () => html`<div class="menu" role="menu" style=${{ minWidth: 240 }}>
+    <div class="menu-cur" role="none"><${CurrencySwitch} ctx=${ctx} compact /></div><div class="menu-sep" role="separator"></div>
     ${R.CLOUD_ACCOUNT && ctx.openDeleteAccount && html`<button role="menuitem" class="danger-item" onClick=${() => { setMenu(false); ctx.openDeleteAccount(); }}><${Icon} n="trash" c="s" />Delete account</button><div class="menu-sep" role="separator"></div>`}
     <button role="menuitem" onClick=${() => { setMenu(false); ctx.logout(); }}><${Icon} n="logout" c="s" />Log out</button></div>`;
   return html`<div class=${'app' + (page === 'new' || page === 'edit' ? ' is-form' : '')}>
@@ -428,6 +441,12 @@ function Shell({ ctx, page, children }) {
   </div>`;
 }
 
+// $ / € / ₴ — one setting per account, saved with the profile.
+function CurrencySwitch({ ctx, compact }) {
+  return html`<div class=${'cur-switch' + (compact ? ' compact' : '')}><span class="small c2" id="cur-l">Currency</span>
+    <div class="seg" role="radiogroup" aria-labelledby="cur-l">${CURRENCIES.map(([code, sym, label]) => html`<button type="button" role="radio" aria-checked=${CUR === code} aria-label=${label} title=${label} onClick=${() => ctx.update(() => ({ currency: code }))}>${sym} ${code}</button>`)}</div></div>`;
+}
+
 // Phones: the profile menu opens as a bottom sheet (the sidebar menu is used on wider screens).
 function ProfileSheet({ ctx, onClose }) {
   const ref = useOverlay(onClose);
@@ -436,6 +455,7 @@ function ProfileSheet({ ctx, onClose }) {
     <span class="sheet-grip" aria-hidden="true"></span>
     <div class="row gap12 sheet-head"><span class="avatar">${R.USER.photo ? html`<img src=${R.USER.photo} alt="" referrerpolicy="no-referrer" width="40" height="40" style=${{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />` : R.USER.initials}</span>
       <div class="grow col"><b id="ps-h">${R.USER.name}</b><span class="small c2" style=${{ overflow: 'hidden', textOverflow: 'ellipsis' }}>${R.USER.email}</span></div></div>
+    <${CurrencySwitch} ctx=${ctx} />
     <div class="col sheet-actions">
       <button class="sheet-btn" data-autofocus onClick=${() => { onClose(); ctx.logout(); }}><${Icon} n="logout" c="s" />Log out</button>
       ${R.CLOUD_ACCOUNT && ctx.openDeleteAccount && html`<button class="sheet-btn danger" onClick=${() => { onClose(); ctx.openDeleteAccount(); }}><${Icon} n="trash" c="s" />Delete account</button>`}
@@ -493,19 +513,30 @@ function EmptyState({ title = 'No reminders yet' }) {
 
 // ---------- Onboarding (v3: 3 short steps — pain → pick your first reminders → you're covered) ----------
 // Plans and prices are typical EU list prices (estimates); people can change them later.
+function P3(usd, eur, uah) { return { USD: usd, EUR: eur, UAH: uah }; }
 const ONB = [
-  { name: 'Netflix', tone: 'rose', plans: [['With ads', 5.99], ['Standard', 13.99], ['Premium', 19.99]], def: 1, days: 6 },
-  { name: 'Spotify', tpl: 'Spotify Family', tone: 'yellow', plans: [['Individual', 11.99], ['Duo', 16.99], ['Family', 19.99]], def: 0, days: 12 },
-  { name: 'ChatGPT', tpl: 'ChatGPT Plus', tone: 'sky', plans: [['Plus', 20], ['Pro', 200]], def: 0, days: 17 },
-  { name: 'Claude', tone: 'peach', plans: [['Pro', 18], ['Max 5×', 90], ['Max 20×', 180]], def: 0, days: 19 },
-  { name: 'iCloud+', tone: 'sky', plans: [['50 GB', 0.99], ['200 GB', 2.99], ['2 TB', 9.99]], def: 1, days: 9 },
-  { name: 'YouTube Premium', tone: 'rose', plans: [['Individual', 12.99], ['Family', 25.99]], def: 0, days: 15 },
-  { name: 'Disney+', tone: 'lavender', plans: [['With ads', 5.99], ['Standard', 9.99], ['Premium', 13.99]], def: 1, days: 21 },
-  { name: 'Amazon Prime', tone: 'yellow', plans: [['Monthly', 8.99, 'monthly'], ['Yearly', 89.9, 'yearly']], def: 0, days: 24 },
-  { name: 'Adobe Creative Cloud', tone: 'peach', plans: [['Photography', 11.99], ['All Apps', 62.99]], def: 0, days: 27 },
+  // plans: [label, { USD, EUR, UAH }, cycle?] — typical list prices (estimates). tpl = template with the cancel link.
+  { name: 'Netflix', group: 'Video & music', plans: [['Basic', P3(7.99, 5.99, 199)], ['Standard', P3(17.99, 13.99, 279)], ['Premium', P3(24.99, 19.99, 359)]], def: 1, days: 6 },
+  { name: 'YouTube Premium', group: 'Video & music', plans: [['Individual', P3(13.99, 12.99, 99)], ['Family', P3(22.99, 25.99, 179)]], def: 0, days: 15 },
+  { name: 'Spotify', group: 'Video & music', plans: [['Individual', P3(11.99, 10.99, 169)], ['Duo', P3(16.99, 14.99, 229)], ['Family', P3(19.99, 17.99, 269)]], def: 0, days: 12 },
+  { name: 'Megogo', group: 'Video & music', plans: [['Light', P3(2.99, 2.99, 99)], ['Maximum', P3(6.99, 6.49, 249)]], def: 0, days: 10 },
+  { name: 'Kyivstar TV', group: 'Video & music', plans: [['Basic', P3(2.49, 2.29, 99)], ['Premium', P3(5.99, 5.59, 249)]], def: 0, days: 13 },
+  { name: 'Sweet.tv', group: 'Video & music', plans: [['Start', P3(1.49, 1.39, 49)], ['Max', P3(4.99, 4.69, 199)]], def: 0, days: 16 },
+  { name: 'Prime Video', group: 'Video & music', plans: [['Monthly', P3(8.99, 4.99, 215)]], def: 0, days: 22 },
+  { name: 'ChatGPT', tpl: 'ChatGPT Plus', group: 'AI', plans: [['Plus', P3(20, 23, 849)], ['Pro', P3(200, 229, 8299)]], def: 0, days: 17 },
+  { name: 'Claude', group: 'AI', plans: [['Pro', P3(20, 18, 829)], ['Max 5×', P3(100, 90, 4149)], ['Max 20×', P3(200, 180, 8299)]], def: 0, days: 19 },
+  { name: 'Telegram Premium', group: 'Social', plans: [['Monthly', P3(4.99, 4.99, 209)], ['Yearly', P3(35.99, 35.99, 1499), 'yearly']], def: 0, days: 8 },
+  { name: 'Meta Verified', group: 'Social', plans: [['Instagram / Facebook', P3(14.99, 13.99, 619)]], def: 0, days: 20 },
+  { name: 'X Premium', group: 'Social', plans: [['Basic', P3(3, 3, 129)], ['Premium', P3(8, 8, 339)]], def: 1, days: 23 },
+  { name: 'Snapchat+', group: 'Social', plans: [['Monthly', P3(3.99, 3.99, 169)]], def: 0, days: 25 },
+  { name: 'iCloud+', group: 'Cloud & tools', plans: [['50 GB', P3(0.99, 0.99, 39)], ['200 GB', P3(2.99, 2.99, 109)], ['2 TB', P3(9.99, 9.99, 369)]], def: 1, days: 9 },
+  { name: 'Google One', group: 'Cloud & tools', plans: [['100 GB', P3(1.99, 1.99, 79)], ['2 TB', P3(9.99, 9.99, 339)]], def: 0, days: 14 },
+  { name: 'Adobe Creative Cloud', group: 'Cloud & tools', plans: [['Photography', P3(19.99, 11.99, 829)], ['All Apps', P3(59.99, 62.99, 2499)]], def: 0, days: 27 },
 ];
+const ONB_GROUPS = ['Video & music', 'AI', 'Social', 'Cloud & tools'];
+const onbTone = (s) => (R.TEMPLATES.find((t) => t.name === (s.tpl || s.name)) || {}).tone || 'lavender';
 const ONB_DEFAULT = [ONB[0].name]; // only the first service is preselected
-const onbPlan = (s, i) => { const [label, amount, cycle] = s.plans[i]; return { label, amount, cycle: cycle || 'monthly' }; };
+const onbPlan = (s, i) => { const [label, prices, cycle] = s.plans[i]; return { label, amount: prices[CUR] ?? prices.USD, cycle: cycle || 'monthly' }; };
 const perMonth = (p) => (p.cycle === 'yearly' ? p.amount / 12 : p.amount);
 
 function Onboarding({ ctx }) {
@@ -523,7 +554,7 @@ function Onboarding({ ctx }) {
     const fresh = chosen.filter((c) => !have.has(c.s.name.toLowerCase()));
     const tpl = (c) => R.TEMPLATES.find((t) => t.name === (c.s.tpl || c.s.name)) || {};
     const recs = fresh.map((c) => ({ id: 'ob-' + uid(), name: c.s.name, category: 'subscription', amount: c.p.amount, cycle: c.p.cycle, date: c.date, remind: 7, channel: defaultChannel(), link: tpl(c).url || '',
-      note: c.s.plans.length > 1 ? `${c.p.label} plan` : '', status: 'active', reason: '', followUp: '', tone: c.s.tone, history: [{ type: 'created', date: R.iso(R.today()), text: 'Added during setup' }] }));
+      note: c.s.plans.length > 1 ? `${c.p.label} plan` : '', status: 'active', reason: '', followUp: '', tone: onbTone(c.s), history: [{ type: 'created', date: R.iso(R.today()), text: 'Added during setup' }] }));
     if (recs.length) ctx.update((st) => ({ reminders: [...st.reminders, ...recs] }));
     setMade(recs.map((r) => r.id)); setAdded(chosen); setStep(3);
   };
@@ -535,7 +566,7 @@ function Onboarding({ ctx }) {
 
   const body = step === 1 ? html`
     <div class="onb3-hero" aria-hidden="true">
-      <div class="onb3-alert bad"><img class="onb3-duck-sm" src="duck-cry.png" width="60" height="60" alt="" /><div class="grow"><b>Netflix</b><span class="small c2">Charged today · you forgot to cancel</span></div><b class="danger-txt">−€13.99</b></div>
+      <div class="onb3-alert bad"><img class="onb3-duck-sm" src="duck-cry.png" width="60" height="60" alt="" /><div class="grow"><b>Netflix</b><span class="small c2">Charged today · you forgot to cancel</span></div><b class="danger-txt">−${money(onbPlan(ONB[0], 1).amount)}</b></div>
       <span class="onb3-vs">instead</span>
       <div class="onb3-alert good"><img class="onb3-duck-sm" src="duck-cool.png" width="60" height="60" alt="" /><div class="grow"><b>Netflix renews in 7 days</b><span class="small c2">Keep it, cancel it, or decide later</span></div><span class="badge t-brand">Reminder</span></div>
     </div>
@@ -545,19 +576,20 @@ function Onboarding({ ctx }) {
   : step === 2 ? html`
     <h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>What do you pay for?</h1>
     <p class="body-l c2 onb3-sub">Tap to add — these become your first reminders. Pick your plan and next charge date.</p>
-    <ul class="onb3-list" aria-label="Services">${ONB.map((s) => { const on = !!picks[s.name]; const pk = picks[s.name]; const cheapest = Math.min(...s.plans.map((x) => x[1]));
+    <${CurrencySwitch} ctx=${ctx} />
+    ${ONB_GROUPS.map((g) => html`<section class="onb3-group" aria-label=${g} key=${g}><h2 class="onb3-gh">${g}</h2><ul class="onb3-list">${ONB.filter((s) => s.group === g).map((s) => { const on = !!picks[s.name]; const pk = picks[s.name]; const cheapest = Math.min(...s.plans.map((x, i) => onbPlan(s, i).amount)); const tone = onbTone(s);
       return html`<li class=${'onb3-svc' + (on ? ' on' : '')} key=${s.name}>
-        <button type="button" class="onb3-svc-head" aria-pressed=${on} onClick=${() => toggle(s)}><${Logo} r=${{ name: s.name, tone: s.tone }} size="sm" /><span class="grow"><b>${s.name}</b><span class="small c3">${on ? `${onbPlan(s, pk.plan).label} · ${money(onbPlan(s, pk.plan).amount)} / ${onbPlan(s, pk.plan).cycle === 'yearly' ? 'year' : 'month'}` : `from ${money(cheapest)}`}</span></span><span class="onb3-check" aria-hidden="true">${on ? html`<${Icon} n="check" c="s" />` : html`<${Icon} n="plus" c="s" />`}</span></button>
-        ${on && html`<div class="onb3-opts"><div class="row wrap" role="radiogroup" aria-label=${`${s.name} plan`}>${s.plans.map((pl, i) => html`<button type="button" class="chip sm" role="radio" aria-checked=${pk.plan === i} onClick=${() => setPick(s.name, { plan: i })}>${pl[0]} · ${money(pl[1])}</button>`)}</div>
+        <button type="button" class="onb3-svc-head" aria-pressed=${on} onClick=${() => toggle(s)}><${Logo} r=${{ name: s.name, tone }} size="sm" /><span class="grow"><b>${s.name}</b><span class="small c3">${on ? `${onbPlan(s, pk.plan).label} · ${money(onbPlan(s, pk.plan).amount)} / ${onbPlan(s, pk.plan).cycle === 'yearly' ? 'year' : 'month'}` : `${s.plans.length > 1 ? 'from ' : ''}${money(cheapest)}`}</span></span><span class="onb3-check" aria-hidden="true">${on ? html`<${Icon} n="check" c="s" />` : html`<${Icon} n="plus" c="s" />`}</span></button>
+        ${on && html`<div class="onb3-opts">${s.plans.length > 1 && html`<div class="row wrap" role="radiogroup" aria-label=${`${s.name} plan`}>${s.plans.map((pl, i) => html`<button type="button" class="chip sm" role="radio" aria-checked=${pk.plan === i} onClick=${() => setPick(s.name, { plan: i })}>${pl[0]} · ${money(onbPlan(s, i).amount)}</button>`)}</div>`}
           <div class="row onb3-date"><span class="small c2">Next charge</span><${DateField} id=${'onb-d-' + s.name.replace(/\W/g, '')} height=${40} min=${R.iso(R.today())} value=${pk.date} onChange=${(v) => setPick(s.name, { date: v })} /></div></div>`}
-      </li>`; })}</ul>
+      </li>`; })}</ul></section>`)}
     <p class="small c3" style=${{ margin: 0 }}>Prices are typical list prices — change them anytime. Anything else? Add it from “My reminders” later.</p>`
   : html`
     <div class="onb3-done"><img src="duck-wave.png" width="128" height="128" alt="" class="onb3-duck" />
       <h1 class="h1 big" id="onb-h" tabindex="-1" ref=${headRef}>${added.length ? 'You’re covered 🎉' : 'All set 👋'}</h1>
       <p class="body-l c2 onb3-sub">${added.length ? html`${added.length} reminder${added.length > 1 ? 's' : ''} · ${total(added.reduce((a, c) => a + perMonth(c.p), 0))}` : 'Add your first reminder whenever you’re ready.'}</p></div>
-    ${added.length > 0 && html`<ul class="onb3-sum">${added.slice().sort((a, b) => a.date.localeCompare(b.date)).map((c) => html`<li><${Logo} r=${{ name: c.s.name, tone: c.s.tone }} size="sm" /><span class="grow"><b>${c.s.name}</b><span class="small c3">${c.p.label} · renews ${fmt(c.date)}</span></span><span class="small cb onb3-when" title="First reminder">${fmt(R.iso(R.addDays(R.parse(c.date), -7)) < R.iso(R.today()) ? R.iso(R.today()) : R.iso(R.addDays(R.parse(c.date), -7)))}</span></li>`)}</ul>`}
-    <ol class="onb3-flow" aria-label="How it works"><li><span class="t-brand">🔔</span>We remind you 7 days before</li><li><span class="t-amber">🤔</span>Keep, cancel or decide later</li><li><span class="t-green">✅</span>No surprise charges</li></ol>`;
+    ${added.length > 0 && html`<ul class="onb3-sum">${added.slice().sort((a, b) => a.date.localeCompare(b.date)).map((c) => html`<li><${Logo} r=${{ name: c.s.name, tone: onbTone(c.s) }} size="sm" /><span class="grow"><b>${c.s.name}</b><span class="small c3">${c.p.label} · renews ${fmt(c.date)}</span></span><span class="small cb onb3-when" title="First reminder">${fmt(R.iso(R.addDays(R.parse(c.date), -7)) < R.iso(R.today()) ? R.iso(R.today()) : R.iso(R.addDays(R.parse(c.date), -7)))}</span></li>`)}</ul>`}
+    <ol class="onb3-flow" aria-label="How it works"><li><span class="onb3-ic t-brand"><${Icon} n="bell-ring" /></span>We remind you 7 days before</li><li><span class="onb3-ic t-amber"><${Icon} n="scale" /></span>Keep, cancel or decide later</li><li><span class="onb3-ic t-green"><${Icon} n="shield" /></span>No surprise charges</li></ol>`;
 
   const backBtn = html`<${Btn} v="secondary" icon="chevron-left" onClick=${back}>Back<//>`;
   const foot = step === 1 ? html`<${Btn} full iconR="arrow-right" onClick=${() => setStep(2)}>Let’s find yours<//>`
@@ -785,7 +817,7 @@ function Drawer({ r, ctx, onClose }) {
         : html`<span class="small c2">Notifications are off on this device, so we can’t remind you here.</span>
           <div><${Btn} v="secondary" sm icon="bell" onClick=${ctx.enableNotifications}>Turn on notifications<//></div>`}
         <span aria-live="polite">${mail.s === 'notif' ? html`<span class="msg ok"><${Icon} n="circle-check" c="xs" />${mail.msg}</span>` : mail.s === 'notif-err' ? html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${mail.msg}</span>` : ''}</span></div>`)}
-      <div class="col gap12"><b>History</b>${[...r.history].reverse().map((h) => html`<div class="row gap12"><span class="logo sm" style=${{ background: 'var(--subtle)', color: 'var(--text-2)' }}><${Icon} n=${{ created: 'plus', reminded: 'bell', postponed: 'hourglass', cancelled: 'x', kept: 'check', edited: 'pencil' }[h.type] || 'info'} c="xs" /></span><div><div>${h.text}</div><div class="small c3">${fmt(h.date)}</div></div></div>`)}</div>
+      <div class="col gap12"><b>History</b>${[...r.history].reverse().map((h) => html`<div class="row gap12"><span class="logo sm" style=${{ background: 'var(--subtle)', color: 'var(--text-2)' }}><${Icon} n=${{ created: 'calendar-plus', reminded: 'bell-ring', postponed: 'hourglass', cancelled: 'circle-x', kept: 'circle-check', edited: 'pencil' }[h.type] || 'info'} c="xs" /></span><div><div>${h.text}</div><div class="small c3">${fmt(h.date)}</div></div></div>`)}</div>
     </div>
     <div class="row" style=${{ padding: 24, borderTop: '1px solid var(--muted)', justifyContent: 'space-between' }}>
       <${Btn} v="secondary" sm icon="pencil" onClick=${() => { onClose(); go('edit/' + r.id); }}>Edit<//>
@@ -983,7 +1015,7 @@ function CreateForm({ ctx, editId }) {
   const rank = (n, k) => { n = n.toLowerCase(); if (n.startsWith(k)) return 0; if (n.split(/[\s+]+/).some((w) => w.startsWith(k))) return 1; return n.includes(k) ? 2 : 9; };
   const results = q.trim() ? R.TEMPLATES.map((t) => [t, rank(t.name, q.trim().toLowerCase())]).filter(([, r]) => r < 9).sort((a, b) => a[1] - b[1]).map(([t]) => t) : R.TEMPLATES.filter((t) => t.category === 'subscription').slice(0, 8);
   useEffect(() => { try { const n = loading ? null : sessionStorage.getItem('rr-tpl'); if (n && !editId) { sessionStorage.removeItem('rr-tpl'); const t = R.TEMPLATES.find((x) => x.name === n); if (t) applyTpl(t); } } catch (e) { /* ok */ } }, [loading]);
-  const applyTpl = (t) => { setF((x) => ({ ...x, link: t.url || x.link || '', name: t.name, category: t.category, amount: t.amount ? String(t.amount) : '', cycle: t.cycle, tone: t.tone })); setTpl(t.name); setQ(''); setOpen(false); setDirty(true); setErrors({}); setTimeout(() => { const el = document.getElementById(f.date ? 'f-amount' : 'f-date'); if (el) el.focus(); }, 0); };
+  const applyTpl = (t) => { setF((x) => ({ ...x, link: t.url || x.link || '', name: t.name, category: t.category, amount: R.priceOf(t, CUR) ? String(R.priceOf(t, CUR)) : '', cycle: t.cycle, tone: t.tone })); setTpl(t.name); setQ(''); setOpen(false); setDirty(true); setErrors({}); setTimeout(() => { const el = document.getElementById(f.date ? 'f-amount' : 'f-date'); if (el) el.focus(); }, 0); };
   const manual = () => { setF((x) => ({ ...blank, name: q.trim() })); setTpl(null); setOpen(false); setQ(''); setTimeout(() => document.getElementById('f-name').focus(), 0); };
   const cancel = useCallback(() => { const leave = () => go(editing ? 'reminders' : 'dashboard'); if (dirty && !done) ctx.confirm({ title: 'Discard this reminder?', body: 'You’ve started filling it in. If you leave now, these changes won’t be saved.', ok: 'Discard', onOk: leave }); else leave(); }, [dirty, done]);
   useEffect(() => { const h = () => cancel(); addEventListener('rr-cancel', h); return () => removeEventListener('rr-cancel', h); }, [cancel]);
@@ -1025,7 +1057,7 @@ function CreateForm({ ctx, editId }) {
   const dup = typed && ctx.state.reminders.find((x) => x.status !== 'cancelled' && x.name.trim().toLowerCase() === typed && (!editing || x.id !== editing.id));
   const dupName = dup ? dup.name : '';
   const tplData = tpl && R.TEMPLATES.find((t) => t.name === tpl);
-  const priceFromTpl = !!(tplData && tplData.amount && String(tplData.amount) === String(f.amount));
+  const priceFromTpl = !!(tplData && R.priceOf(tplData, CUR) && String(R.priceOf(tplData, CUR)) === String(f.amount));
   return html`<div class="col gap4"><span class="small c3">My reminders › ${editing ? 'Edit' : 'New'}</span><div class="page-head"><h1 class="h1">${editing ? `Edit ${editing.name}` : 'Add a reminder'}</h1><${Btn} v="ghost" sm icon="x" class="ph-add" onClick=${cancel}>Cancel<//></div><p class="body-l c2" style=${{ margin: 0 }}>Pick a service to prefill, or enter it yourself. Takes about 30 seconds.</p></div>
   <form class="form-layout" onSubmit=${submit} noValidate>
     <div class="card col gap24" style=${{ padding: 32, borderRadius: 16 }}>
@@ -1035,7 +1067,7 @@ function CreateForm({ ctx, editId }) {
             onInput=${(e) => { setQ(e.target.value); setOpen(true); setHi(0); }} onFocus=${() => setOpen(true)} onClick=${() => setOpen(true)} onBlur=${() => setTimeout(() => setOpen(false), 150)}
             onKeyDown=${(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHi(Math.min(hi + 1, results.length)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(Math.max(hi - 1, 0)); } else if (e.key === 'Enter') { e.preventDefault(); hi < results.length ? applyTpl(results[hi]) : manual(); } else if (e.key === 'Escape') { setOpen(false); } }} /><//>
             <span style=${{ position: 'absolute', left: 14, top: 14 }} class="c3"><${Icon} n="search" /></span></div>
-          ${open && html`<div class="listbox" id="tpl-list" role="listbox" aria-label=${q.trim() ? 'Matching services' : 'Popular subscriptions'}><div class="lb-h" aria-hidden="true">${q.trim() ? (results.length ? 'Results' : 'No matching service') : 'Popular subscriptions'}</div>${results.map((t, i) => html`<div class="option" role="option" aria-selected=${i === hi} onMouseDown=${(e) => { e.preventDefault(); applyTpl(t); }}><${Logo} r=${t} size="sm" /><span class="grow"><b>${q.trim() && t.name.toLowerCase().startsWith(q.trim().toLowerCase()) ? html`<span class="hl">${t.name.slice(0, q.trim().length)}</span>${t.name.slice(q.trim().length)}` : t.name}</b><span class="small c3" style=${{ display: 'block' }}>${cat(t.category).one}${t.amount ? ` · ${money(t.amount)} / ${cyc(t.cycle).per}` : ''}</span></span></div>`)}
+          ${open && html`<div class="listbox" id="tpl-list" role="listbox" aria-label=${q.trim() ? 'Matching services' : 'Popular subscriptions'}><div class="lb-h" aria-hidden="true">${q.trim() ? (results.length ? 'Results' : 'No matching service') : 'Popular subscriptions'}</div>${results.map((t, i) => html`<div class="option" role="option" aria-selected=${i === hi} onMouseDown=${(e) => { e.preventDefault(); applyTpl(t); }}><${Logo} r=${t} size="sm" /><span class="grow"><b>${q.trim() && t.name.toLowerCase().startsWith(q.trim().toLowerCase()) ? html`<span class="hl">${t.name.slice(0, q.trim().length)}</span>${t.name.slice(q.trim().length)}` : t.name}</b><span class="small c3" style=${{ display: 'block' }}>${cat(t.category).one}${R.priceOf(t, CUR) ? ` · ${money(R.priceOf(t, CUR))} / ${cyc(t.cycle).per}` : ''}</span></span></div>`)}
             <div class="option" role="option" aria-selected=${hi === results.length} onMouseDown=${(e) => { e.preventDefault(); manual(); }}><span class="logo sm" style=${{ background: 'var(--subtle)' }}><${Icon} n="pencil" c="xs" /></span><b>${q.trim() ? `Enter “${q.trim()}” manually` : 'Enter manually'}</b></div></div>`}
         </div>
         <div class="row wrap">${R.TEMPLATES.slice(0, 6).map((t) => html`<button type="button" class="chip" aria-pressed=${tpl === t.name} onClick=${() => applyTpl(t)}>${tpl === t.name && html`<${Icon} n="check" c="s" />`}${t.name}</button>`)}<button type="button" class="chip dashed" onClick=${manual}><${Icon} n="pencil" c="xs" />Enter manually</button></div>
@@ -1044,7 +1076,7 @@ function CreateForm({ ctx, editId }) {
         <div class="field"><label for="f-name">Name <span aria-hidden="true">*</span></label><${Clear} show=${!!f.name} label="Clear name" target="f-name" onClear=${() => set('name', '')}><${GrowText} oneLine id="f-name" className=${errors.name ? 'err' : ''} maxlength="80" value=${f.name} required aria-invalid=${!!errors.name} aria-describedby=${errors.name ? 'e-name' : undefined} onInput=${(e) => set('name', e.target.value)} /><//>${errors.name && html`<span class="msg err" id="e-name"><${Icon} n="info" c="xs" />${errors.name}</span>`}${!errors.name && dupName && html`<span class="msg warn"><${Icon} n="info" c="xs" />You already have ${dupName}. Add it again only for a separate account or plan.</span>`}</div>
         <div class="field"><label for="f-cat">Category</label><select id="f-cat" class="input" value=${f.category} onChange=${(e) => set('category', e.target.value)}>${R.CATEGORIES.map((c) => html`<option value=${c.id}>${c.one}</option>`)}</select></div>
       </div>
-      ${!isDoc && html`<div class="field"><label for="f-amount">Amount (optional)</label><div class="input-wrap"><span style=${{ position: 'absolute', left: 16, top: 13 }} class="c2 body-l">€</span><input id="f-amount" inputmode="decimal" class=${'input' + (errors.amount || amountBad ? ' err' : '')} style=${{ paddingLeft: 32 }} placeholder="0.00" value=${f.amount} aria-invalid=${!!(errors.amount || amountBad)} aria-describedby="e-amount" onInput=${(e) => set('amount', e.target.value)} /></div>
+      ${!isDoc && html`<div class="field"><label for="f-amount">Amount (optional) <span class="c3" style=${{ fontWeight: 400 }}>· ${CUR}</span></label><div class="input-wrap"><span style=${{ position: 'absolute', left: 16, top: 13 }} class="c2 body-l" aria-hidden="true">${curSym()}</span><input id="f-amount" inputmode="decimal" class=${'input' + (errors.amount || amountBad ? ' err' : '')} style=${{ paddingLeft: 32 }} placeholder="0.00" value=${f.amount} aria-invalid=${!!(errors.amount || amountBad)} aria-describedby="e-amount" onInput=${(e) => set('amount', e.target.value)} /></div>
         ${errors.amount || amountBad ? html`<span class="msg err" id="e-amount"><${Icon} n="info" c="xs" />Use numbers only, like 9.99.</span>` : priceFromTpl ? html`<span class="msg hint" id="e-amount">Typical ${tpl} price. Change it if yours differs.</span>` : null}</div>
       <div class="field"><span class="flabel" id="cy-l">Billing cycle</span><div class="seg" role="radiogroup" aria-labelledby="cy-l">${R.CYCLES.map((c) => html`<button type="button" role="radio" aria-checked=${f.cycle === c.id} onClick=${() => set('cycle', c.id)}>${c.label}</button>`)}</div></div>`}
       <div class="field"><label for="f-date">${isDoc ? 'Expiry date' : 'Next charge date'} <span aria-hidden="true">*</span></label><${DateField} id="f-date" className=${errors.date ? 'err' : past ? 'warn' : ''} value=${f.date} invalid=${!!errors.date} describedBy="e-date" onChange=${(v) => set('date', v)} />
@@ -1206,7 +1238,7 @@ function ListScreen({ ctx }) {
             ${mine.length > 0 && html`<div class="lb-h" aria-hidden="true">Your reminders</div>`}
             ${mine.map((r) => html`<div class="option" role="option" aria-selected="false" key=${r.id} onMouseDown=${(e) => { e.preventDefault(); setSugOpen(false); ctx.openDrawer(r.id); }}><${Logo} r=${r} size="sm" /><span class="grow" style=${{ minWidth: 0 }}><b>${r.name}</b><span class="small c3" style=${{ display: 'block' }}>${r.amount ? money(r.amount) + ' · ' : ''}${r.status === 'cancelled' ? 'cancelled' : (r.category === 'document' ? 'expires ' : 'renews ') + fmt(r.date)}</span></span><${Icon} n="chevron-right" c="s" /></div>`)}
             ${newTpls.length > 0 && html`<div class="lb-h" aria-hidden="true">Add a new reminder</div>`}
-            ${newTpls.map((t) => html`<div class="option" role="option" aria-selected="false" key=${t.name} onMouseDown=${(e) => { e.preventDefault(); try { sessionStorage.setItem('rr-tpl', t.name); } catch (er) { /* ok */ } go('new'); }}><${Logo} r=${t} size="sm" /><span class="grow"><b>Add ${t.name}</b><span class="small c3" style=${{ display: 'block' }}>${t.amount ? money(t.amount) + ' / ' + cyc(t.cycle).per : cat(t.category).one}</span></span><${Icon} n="plus" c="s" /></div>`)}
+            ${newTpls.map((t) => html`<div class="option" role="option" aria-selected="false" key=${t.name} onMouseDown=${(e) => { e.preventDefault(); try { sessionStorage.setItem('rr-tpl', t.name); } catch (er) { /* ok */ } go('new'); }}><${Logo} r=${t} size="sm" /><span class="grow"><b>Add ${t.name}</b><span class="small c3" style=${{ display: 'block' }}>${R.priceOf(t, CUR) ? money(R.priceOf(t, CUR)) + ' / ' + cyc(t.cycle).per : cat(t.category).one}</span></span><${Icon} n="plus" c="s" /></div>`)}
           </div>`}</div>
         <div class="seg scroll-x" role="radiogroup" aria-label="Status">${[['all', 'All'], ['unfinished', `Unfinished · ${counts.unfinished}`], ['next30', `Next 30 days · ${counts.next30}`], ['cancelled', `Cancelled · ${counts.cancelled}`]].map(([id, l]) => html`<button role="radio" aria-checked=${status === id} onClick=${() => setStatus(id)} style=${{ whiteSpace: 'nowrap' }}>${l}</button>`)}</div>
         ${view === 'list' && html`<label class="row c2" style=${{ gap: 6 }}><span class="small">Sort</span><select class="input" style=${{ height: 44, width: 'auto' }} value=${sort} onChange=${(e) => setSort(e.target.value)}><option value="date">Date</option><option value="amount">Amount</option><option value="name">Name</option></select></label>`}

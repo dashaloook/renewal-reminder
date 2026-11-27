@@ -43,6 +43,12 @@ test('profile rejects unknown fields and more than 5 push devices', async () => 
   await assertSucceeds(setDoc(doc(alice(), 'users/alice'), { push: six.slice(0, 5) }));
 });
 
+test('profile currency must be USD, EUR or UAH', async () => {
+  for (const c of ['USD', 'EUR', 'UAH']) await assertSucceeds(setDoc(doc(alice(), 'users/alice'), { currency: c }));
+  await assertFails(setDoc(doc(alice(), 'users/alice'), { currency: 'GBP' }));
+  await assertFails(setDoc(doc(alice(), 'users/alice'), { currency: 5 }));
+});
+
 test('old all-in-one reminders list is still accepted (for moving old accounts), max 500', async () => {
   await assertSucceeds(setDoc(doc(alice(), 'users/alice'), { reminders: [reminder('a')] }));
   await assertFails(setDoc(doc(alice(), 'users/alice'), { reminders: Array.from({ length: 501 }, (_, i) => reminder(`r${i}`)) }));

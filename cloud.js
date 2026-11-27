@@ -22,7 +22,7 @@
   }
 
   // Profile fields live in users/{uid}; each reminder is its own record in users/{uid}/reminders/{id}.
-  const FIELDS = ['stats', 'onboarded', 'notif', 'bannerDismissed'];
+  const FIELDS = ['stats', 'onboarded', 'notif', 'bannerDismissed', 'currency'];
   const R_FIELDS = ['id', 'name', 'category', 'amount', 'cycle', 'date', 'remind', 'channel', 'link', 'note', 'status', 'reason', 'followUp', 'tone', 'history', 'emailedOn'];
   const pickR = (r) => clean(R_FIELDS.reduce((o, k) => (r[k] !== undefined ? { ...o, [k]: r[k] } : o), {}));
   const sameR = (a, b) => JSON.stringify(pickR(a)) === JSON.stringify(pickR(b));

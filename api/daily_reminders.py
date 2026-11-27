@@ -33,7 +33,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from send_reminder import build_email, mail_channel, friendly_send_error, SentLedger, sent_key  # noqa: E402  (shared email code)
+from send_reminder import build_email, mail_channel, friendly_send_error, SentLedger, sent_key, money_str  # noqa: E402  (shared email code)
 
 TZ = "Europe/Kyiv"
 SCOPES = ["https://www.googleapis.com/auth/datastore", "https://www.googleapis.com/auth/identitytoolkit",
@@ -127,7 +127,8 @@ def merge_users(profiles, reminder_docs):
         fields = profiles.get(uid, {})
         merged = {r["id"]: r for r in (fields.get("reminders") or []) if isinstance(r, dict) and r.get("id")}
         merged.update(per.get(uid, {}))
-        out.append((uid, list(merged.values()), fields.get("push") or []))
+        cur = fields.get("currency") if fields.get("currency") in ("USD", "EUR", "UAH") else "USD"
+        out.append((uid, [{**r, "currency": cur} for r in merged.values()], fields.get("push") or []))
     return out
 
 
@@ -179,7 +180,7 @@ def notif_copy(r, n, follow_up=False):
         return f"{name} expires {when}", ("Check what you need to renew it." if n <= 0 else "Start renewing it now, so it doesn’t run out.")
     per = {"weekly": " a week", "monthly": " a month", "yearly": " a year"}.get(r.get("cycle"), "")
     amount = r.get("amount") or 0
-    ask = f"Still worth €{amount:,.2f}{per}?" if isinstance(amount, (int, float)) and amount > 0 else "Still need it?"
+    ask = f"Still worth {money_str(amount, r.get('currency'))}{per}?" if isinstance(amount, (int, float)) and amount > 0 else "Still need it?"
     tail = "Decide before you’re charged." if n <= 0 else "Decide before tomorrow’s charge." if n == 1 else "Take a moment to decide."
     return f"{name} renews {when}", f"{ask} {tail}"
 

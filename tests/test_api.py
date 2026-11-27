@@ -143,7 +143,7 @@ class DailyJobTests(unittest.TestCase):
 
     def test_notification_copy(self):
         self.assertEqual(d.notif_copy({"name": "Disney+", "amount": 9.99, "cycle": "monthly"}, 0),
-                         ("Disney+ renews today", "Still worth €9.99 a month? Decide before you’re charged."))
+                         ("Disney+ renews today", "Still worth $9.99 a month? Decide before you’re charged."))
         self.assertEqual(d.notif_copy({"name": "Passport", "category": "document"}, 30)[0], "Passport expires in 30 days")
         self.assertEqual(d.notif_copy({"name": "Netflix"}, 3, follow_up=True)[0], "Time to decide on Netflix")
 
@@ -294,3 +294,24 @@ class SaveEmailNoDuplicateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CurrencyTests(unittest.TestCase):
+    def test_money_defaults_to_dollars_and_knows_euro_and_hryvnia(self):
+        self.assertEqual(s.money_str(9.99), "$9.99")
+        self.assertEqual(s.money_str(9.99, "EUR"), "€9.99")
+        self.assertEqual(s.money_str(1999, "UAH"), "₴1,999.00")
+
+    def test_email_uses_the_reminders_currency(self):
+        r, err = s._validate({"reminder": {"name": "Netflix", "date": "2026-12-03", "amount": 279, "cycle": "monthly", "currency": "UAH"}})
+        self.assertIsNone(err)
+        self.assertIn("₴279.00", s.build_email(r)[1])
+
+    def test_unknown_currency_is_rejected(self):
+        _, err = s._validate({"reminder": {"name": "Netflix", "date": "2026-12-03", "currency": "GBP"}})
+        self.assertEqual(err, "Unknown currency.")
+
+    def test_daily_job_takes_currency_from_the_profile(self):
+        users = d.merge_users({"a": {"currency": "EUR"}, "b": {}}, [("a", {"id": "x", "name": "N"}), ("b", {"id": "y", "name": "M"})])
+        cur = {uid: rs[0]["currency"] for uid, rs, _ in users}
+        self.assertEqual(cur, {"a": "EUR", "b": "USD"})
