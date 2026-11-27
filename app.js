@@ -48,6 +48,7 @@ const P = {
   house: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   'shield-plain': '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
   'credit-card': '<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>',
+  receipt: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/>',
   'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>', search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
@@ -91,15 +92,17 @@ const BRANDS = [[/^netflix/, 'netflix'], [/^spotify/, 'spotify'], [/^(chatgpt|op
   [/^youtube/, 'youtube'], [/^amazon prime|^prime video/, 'amazonprime'], [/^adobe/, 'adobe']];
 const brandOf = (name) => { const n = String(name || '').trim().toLowerCase(); const b = BRANDS.find(([re]) => re.test(n)); return b ? b[1] : null; };
 // No brand logo? A fitting icon by keywords in the name, else by category (unknown subscriptions keep their letter).
-const TOPICS = [[/passport|visa/, 'passport'], [/\bgym|fitness|\bsports?\b|yoga|pilates|swim/, 'dumbbell'], [/internet|wi-?fi|broadband|fibre|fiber/, 'wifi'], [/water/, 'droplet'],
+const TOPICS = [[/\btax|\bvat\b|accountant|bookkeep/, 'receipt'], [/passport|visa/, 'passport'], [/\bgym|fitness|\bsports?\b|yoga|pilates|swim/, 'dumbbell'], [/internet|wi-?fi|broadband|fibre|fiber/, 'wifi'], [/water/, 'droplet'],
   [/electric|power|energy|\bgas\b|heating/, 'zap'], [/phone|mobile|\bsim\b|cellular/, 'smartphone'], [/car\b|vehicle|parking|\bauto|inspection|\bmot\b/, 'car'],
   [/licen[cs]e|driver|\bid\b|identity/, 'id-card'], [/health|medical|dental|doctor|clinic/, 'heart-pulse'],
   [/rent|mortgage|home|house|flat|apartment/, 'house']];
+const TOPIC_COLOR = { dumbbell: '#E8590C', wifi: '#1971C2', droplet: '#0C8599', zap: '#E67700', smartphone: '#6741D9', car: '#2F9E44',
+  'id-card': '#7048E8', passport: '#364FC7', 'heart-pulse': '#E03131', house: '#2B8A3E', receipt: '#087F5B', 'shield-plain': '#1864AB', 'credit-card': '#3B5BDB', 'file-text': '#495057' };
 const CAT_ICON = { payment: 'credit-card', insurance: 'shield-plain', document: 'file-text', household: 'house' };
 const topicOf = (r) => { const n = String(r.name || '').toLowerCase(); const t = TOPICS.find(([re]) => re.test(n)); return t ? t[1] : CAT_ICON[r.category] || null; };
 const Logo = ({ r, size = '' }) => { const b = brandOf(r.name); const ic = b ? null : topicOf(r);
   return b ? html`<span class=${`logo ${size} brand-logo`} aria-hidden="true"><img src=${`logos/${b}.svg`} alt="" width="24" height="24" loading="lazy" /></span>`
-    : ic ? html`<span class=${`logo ${size} topic-logo tone-${r.tone || 'lavender'}`} aria-hidden="true"><${Icon} n=${ic} /></span>`
+    : ic ? html`<span class=${`logo ${size} topic-logo`} style=${{ color: TOPIC_COLOR[ic] || 'var(--brand)' }} aria-hidden="true"><${Icon} n=${ic} /></span>`
     : html`<span class=${`logo ${size} tone-${r.tone || 'lavender'}`} aria-hidden="true">${(r.name || '?').trim().charAt(0).toUpperCase()}</span>`; };
 const UrgBadge = ({ r }) => { const n = R.daysUntil(r.date); const t = r.status === 'cancelled' ? 'neutral' : tone(n);
   return html`<span class=${'badge t-' + t}><${Icon} n=${t === 'red' ? 'alert' : 'clock'} />${r.category === 'document' && n >= 0 ? (n === 0 ? 'Expires today' : rel(n)) : rel(n)}</span>`; };
