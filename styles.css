@@ -631,8 +631,8 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
 .cb-row{display:grid;grid-template-columns:104px minmax(0,1fr) auto 16px;align-items:center;gap:14px;width:calc(100% + 16px);margin:0 -8px;padding:8px;border:0;border-radius:12px;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
 .cb-row:hover{background:var(--brand-subtle)}
 .cb-row:focus-visible,.mb-col:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
-.cb-track{height:14px;border-radius:7px;background:var(--subtle);overflow:hidden;display:block}
-.cb-fill{display:block;height:100%;border-radius:7px;background:var(--brand)}
+.cb-track{height:24px;border-radius:10px;background:var(--subtle);overflow:hidden;display:block}  /* same weight as the month columns */
+.cb-fill{display:block;height:100%;border-radius:10px;background:var(--brand)}
 .cb-val{text-align:right;white-space:nowrap}
 .cb-go{display:inline-flex;opacity:0;transition:opacity .15s}
 .cb-row:hover .cb-go,.cb-row:focus-visible .cb-go{opacity:1}
@@ -644,4 +644,13 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
 .mb-fill{display:block;width:100%;border-radius:10px;background:var(--lavender)}
 .mb-fill.peak{background:var(--brand)}
 .mb-lab{font-size:13px;color:var(--text-2)}
-@media (max-width:480px){.cb-row{grid-template-columns:92px minmax(0,1fr) auto 0;gap:10px}.cb-go{display:none}.mb{gap:6px}.mb-val{font-size:11px}.mb-track{min-height:110px}}
+@media (max-width:480px){.cb-track{height:20px;border-radius:9px}.cb-fill{border-radius:9px}.cb-row{grid-template-columns:92px minmax(0,1fr) auto 0;gap:10px}.cb-go{display:none}.mb{gap:6px}.mb-val{font-size:11px}.mb-track{min-height:110px}}
+
+/* Search: suggestions under the box, and a results header instead of the calendar */
+.filters-row .listbox{top:calc(100% + 6px);z-index:30}
+.search-head{align-items:center;gap:12px;padding:2px 4px}
+
+/* Topic icons for items without a brand logo (same coloured circle, darker icon) */
+.logo.topic-logo{background:#fff;box-shadow:inset 0 0 0 1px var(--muted)}   /* same grey ring as the brand logos; the icon keeps its colour */
+.logo.topic-logo .icon{width:20px;height:20px;stroke-width:2}
+.logo.sm.topic-logo .icon{width:16px;height:16px}.logo.lg.topic-logo .icon{width:24px;height:24px}

@@ -45,7 +45,7 @@
     { name: 'Gym membership', category: 'payment', amount: 29, cycle: 'monthly', tone: 'yellow' },
     { name: 'Home internet', category: 'payment', amount: 14, cycle: 'monthly', tone: 'sky' },
     { name: 'Car liability insurance', category: 'insurance', amount: 186, cycle: 'yearly', tone: 'lavender' },
-    { name: 'Passport', category: 'document', amount: 0, cycle: 'one-time', tone: 'yellow' },
+    { name: 'Tax return', category: 'document', amount: 0, cycle: 'yearly', tone: 'yellow' },
   ];
 
   // offset = days from today to next charge / expiry
@@ -58,7 +58,7 @@
     ['chatgpt', 'ChatGPT Plus', 'subscription', 20, 'monthly', 22, 'sky'],
     ['internet', 'Home internet', 'payment', 14, 'monthly', 1, 'sky'],
     ['gym', 'Gym membership', 'payment', 29, 'monthly', 26, 'yellow'],
-    ['passport', 'Passport', 'document', 0, 'one-time', 142, 'yellow', { remind: 30 }],
+    ['taxes', 'Tax return', 'document', 0, 'yearly', 142, 'yellow', { remind: 30, note: 'Yearly filing deadline. Collect receipts and statements first.' }],
     ['licence', 'Driver’s licence', 'document', 0, 'one-time', 61, 'lavender', { remind: 30 }],
     ['car', 'Car liability insurance', 'insurance', 186, 'yearly', 19, 'lavender', { remind: 14 }],
     ['health', 'Health insurance', 'insurance', 312, 'yearly', 98, 'rose', { remind: 14 }],

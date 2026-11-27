@@ -36,6 +36,20 @@ const amountLine = (r) => r.amount ? `${money(r.amount)}${cyc(r.cycle).per ? ' /
 
 // ---------- icons (Lucide paths) ----------
 const P = {
+  dumbbell: '<path d="m6.5 6.5 11 11"/><path d="m21 21-1-1"/><path d="m3 3 1 1"/><path d="m18 22 4-4"/><path d="m2 6 4-4"/><path d="m3 10 7-7"/><path d="m14 21 7-7"/>',
+  wifi: '<path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.86a10 10 0 0 1 14 0"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/>',
+  droplet: '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  smartphone: '<rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/>',
+  car: '<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+  'id-card': '<path d="M16 10h2"/><path d="M16 14h2"/><path d="M6.17 15a3 3 0 0 1 5.66 0"/><circle cx="9" cy="11" r="2"/><rect x="2" y="5" width="20" height="14" rx="2"/>',
+  passport: '<rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M9 17h6"/>',
+  'heart-pulse': '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/>',
+  house: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  'shield-plain': '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  'credit-card': '<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>',
+  receipt: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/>',
+  'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>', search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   'bell-off': '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/>',
@@ -77,8 +91,18 @@ const ServiceLink = ({ r }) => r.link
 const BRANDS = [[/^netflix/, 'netflix'], [/^spotify/, 'spotify'], [/^(chatgpt|openai)/, 'chatgpt'], [/^claude/, 'claude'], [/^icloud/, 'icloud'],
   [/^youtube/, 'youtube'], [/^amazon prime|^prime video/, 'amazonprime'], [/^adobe/, 'adobe']];
 const brandOf = (name) => { const n = String(name || '').trim().toLowerCase(); const b = BRANDS.find(([re]) => re.test(n)); return b ? b[1] : null; };
-const Logo = ({ r, size = '' }) => { const b = brandOf(r.name);
+// No brand logo? A fitting icon by keywords in the name, else by category (unknown subscriptions keep their letter).
+const TOPICS = [[/\btax|\bvat\b|accountant|bookkeep/, 'receipt'], [/passport|visa/, 'passport'], [/\bgym|fitness|\bsports?\b|yoga|pilates|swim/, 'dumbbell'], [/internet|wi-?fi|broadband|fibre|fiber/, 'wifi'], [/water/, 'droplet'],
+  [/electric|power|energy|\bgas\b|heating/, 'zap'], [/phone|mobile|\bsim\b|cellular/, 'smartphone'], [/car\b|vehicle|parking|\bauto|inspection|\bmot\b/, 'car'],
+  [/licen[cs]e|driver|\bid\b|identity/, 'id-card'], [/health|medical|dental|doctor|clinic/, 'heart-pulse'],
+  [/rent|mortgage|home|house|flat|apartment/, 'house']];
+const TOPIC_COLOR = { dumbbell: '#E8590C', wifi: '#1971C2', droplet: '#0C8599', zap: '#E67700', smartphone: '#6741D9', car: '#2F9E44',
+  'id-card': '#7048E8', passport: '#364FC7', 'heart-pulse': '#E03131', house: '#2B8A3E', receipt: '#087F5B', 'shield-plain': '#1864AB', 'credit-card': '#3B5BDB', 'file-text': '#495057' };
+const CAT_ICON = { payment: 'credit-card', insurance: 'shield-plain', document: 'file-text', household: 'house' };
+const topicOf = (r) => { const n = String(r.name || '').toLowerCase(); const t = TOPICS.find(([re]) => re.test(n)); return t ? t[1] : CAT_ICON[r.category] || null; };
+const Logo = ({ r, size = '' }) => { const b = brandOf(r.name); const ic = b ? null : topicOf(r);
   return b ? html`<span class=${`logo ${size} brand-logo`} aria-hidden="true"><img src=${`logos/${b}.svg`} alt="" width="24" height="24" loading="lazy" /></span>`
+    : ic ? html`<span class=${`logo ${size} topic-logo`} style=${{ color: TOPIC_COLOR[ic] || 'var(--brand)' }} aria-hidden="true"><${Icon} n=${ic} /></span>`
     : html`<span class=${`logo ${size} tone-${r.tone || 'lavender'}`} aria-hidden="true">${(r.name || '?').trim().charAt(0).toUpperCase()}</span>`; };
 const UrgBadge = ({ r }) => { const n = R.daysUntil(r.date); const t = r.status === 'cancelled' ? 'neutral' : tone(n);
   return html`<span class=${'badge t-' + t}><${Icon} n=${t === 'red' ? 'alert' : 'clock'} />${r.category === 'document' && n >= 0 ? (n === 0 ? 'Expires today' : rel(n)) : rel(n)}</span>`; };
@@ -1081,6 +1105,7 @@ function ListScreen({ ctx }) {
     if (o.cat && !o.focus) { const t = R.today(); const d = ctx.state.reminders.filter((r) => r.status !== 'cancelled' && r.category === o.cat).flatMap((r) => occOf(r, t, R.addDays(t, 400))).sort((x, y) => x - y)[0]; if (d) o.focus = R.iso(d); }
     return o; });
   const todayIso = R.iso(R.today());
+  const [sugOpen, setSugOpen] = useState(false);
   const [q, setQ] = useState(''); const [catF, setCatF] = useState(init.cat || 'all'); const [status, setStatus] = useState(init.filter || 'all'); const [sort, setSort] = useState('date'); const [view, setView] = useState('calendar');
   // Default selection: the focused item's date, else the next day that has something due (so details aren't empty), else today.
   const [sel, setSel] = useState(() => {
@@ -1095,6 +1120,12 @@ function ListScreen({ ctx }) {
   const counts = { unfinished: all.filter((r) => r.status === 'unfinished').length, next30: all.filter((r) => r.status !== 'cancelled' && R.daysUntil(r.date) >= 0 && R.daysUntil(r.date) <= 30).length, cancelled: all.filter((r) => r.status === 'cancelled').length };
   let items = all.filter((r) => (catF === 'all' || r.category === catF) && (!q.trim() || (r.name + ' ' + r.note).toLowerCase().includes(q.trim().toLowerCase())) &&
     (status === 'all' || (status === 'unfinished' && r.status === 'unfinished') || (status === 'cancelled' && r.status === 'cancelled') || (status === 'next30' && r.status !== 'cancelled' && R.daysUntil(r.date) >= 0 && R.daysUntil(r.date) <= 30)));
+  const term = q.trim().toLowerCase(); const searching = !!term;
+  // best matches first: name starts with it, then a word in the name does, then anywhere, then the note
+  const rank = (r) => { const n = r.name.toLowerCase(); return n.startsWith(term) ? 0 : n.split(/[\s\-+]+/).some((w) => w.startsWith(term)) ? 1 : n.includes(term) ? 2 : 3; };
+  const mine = searching ? all.filter((r) => (r.name + ' ' + (r.note || '')).toLowerCase().includes(term)).sort((a, b) => rank(a) - rank(b) || a.date.localeCompare(b.date)).slice(0, 5) : [];
+  const newTpls = searching ? R.TEMPLATES.filter((t) => t.name.toLowerCase().includes(term) && !all.some((r) => r.name.toLowerCase() === t.name.toLowerCase())).slice(0, 3) : [];
+  const sugs = [...mine, ...newTpls];
   items = [...items].sort((a, b) => sort === 'amount' ? b.amount - a.amount : sort === 'name' ? a.name.localeCompare(b.name) : a.date.localeCompare(b.date));
   const groups = sort !== 'date' ? [['All results', items]] : [['This week', items.filter((r) => R.daysUntil(r.date) <= 7)], ['This month', items.filter((r) => R.daysUntil(r.date) > 7 && R.daysUntil(r.date) <= 30)], ['Later', items.filter((r) => R.daysUntil(r.date) > 30)]].filter((g) => g[1].length);
   const resetF = () => { setQ(''); setCatF('all'); setStatus('all'); };
@@ -1169,15 +1200,24 @@ function ListScreen({ ctx }) {
   return html`${header}
     <div class="card col filters-card" role="search">
       <div class="row gap12 filters-row">
-        <div class="grow" style=${{ position: 'relative' }}><label for="ls" class="sr-only">Search reminders</label><${Clear} single show=${!!q} label="Clear search" target="ls" onClear=${() => setQ('')}><input id="ls" class="input" style=${{ height: 44, paddingLeft: 42 }} placeholder="Search by name or note" value=${q} onInput=${(e) => setQ(e.target.value)} /><//><span class="c3" style=${{ position: 'absolute', left: 13, top: 12 }}><${Icon} n="search" /></span></div>
+        <div class="grow" style=${{ position: 'relative' }}><label for="ls" class="sr-only">Search reminders</label><${Clear} single show=${!!q} label="Clear search" target="ls" onClear=${() => setQ('')}><input id="ls" class="input" style=${{ height: 44, paddingLeft: 42 }} placeholder="Search by name or note" value=${q} role="combobox" aria-expanded=${sugOpen && sugs.length > 0} aria-controls="ls-sug" aria-autocomplete="list" autocomplete="off"
+          onInput=${(e) => { setQ(e.target.value); setSugOpen(true); }} onClick=${() => setSugOpen(true)} onBlur=${() => setTimeout(() => setSugOpen(false), 150)} onKeyDown=${(e) => { if (e.key === 'Escape') setSugOpen(false); if (e.key === 'Enter') { e.preventDefault(); setSugOpen(false); e.target.blur(); } }} /><//><span class="c3" style=${{ position: 'absolute', left: 13, top: 12 }}><${Icon} n="search" /></span>
+          ${sugOpen && sugs.length > 0 && html`<div class="listbox" id="ls-sug" role="listbox" aria-label="Suggestions">
+            ${mine.length > 0 && html`<div class="lb-h" aria-hidden="true">Your reminders</div>`}
+            ${mine.map((r) => html`<div class="option" role="option" aria-selected="false" key=${r.id} onMouseDown=${(e) => { e.preventDefault(); setSugOpen(false); ctx.openDrawer(r.id); }}><${Logo} r=${r} size="sm" /><span class="grow" style=${{ minWidth: 0 }}><b>${r.name}</b><span class="small c3" style=${{ display: 'block' }}>${r.amount ? money(r.amount) + ' · ' : ''}${r.status === 'cancelled' ? 'cancelled' : (r.category === 'document' ? 'expires ' : 'renews ') + fmt(r.date)}</span></span><${Icon} n="chevron-right" c="s" /></div>`)}
+            ${newTpls.length > 0 && html`<div class="lb-h" aria-hidden="true">Add a new reminder</div>`}
+            ${newTpls.map((t) => html`<div class="option" role="option" aria-selected="false" key=${t.name} onMouseDown=${(e) => { e.preventDefault(); try { sessionStorage.setItem('rr-tpl', t.name); } catch (er) { /* ok */ } go('new'); }}><${Logo} r=${t} size="sm" /><span class="grow"><b>Add ${t.name}</b><span class="small c3" style=${{ display: 'block' }}>${t.amount ? money(t.amount) + ' / ' + cyc(t.cycle).per : cat(t.category).one}</span></span><${Icon} n="plus" c="s" /></div>`)}
+          </div>`}</div>
         <div class="seg scroll-x" role="radiogroup" aria-label="Status">${[['all', 'All'], ['unfinished', `Unfinished · ${counts.unfinished}`], ['next30', `Next 30 days · ${counts.next30}`], ['cancelled', `Cancelled · ${counts.cancelled}`]].map(([id, l]) => html`<button role="radio" aria-checked=${status === id} onClick=${() => setStatus(id)} style=${{ whiteSpace: 'nowrap' }}>${l}</button>`)}</div>
         ${view === 'list' && html`<label class="row c2" style=${{ gap: 6 }}><span class="small">Sort</span><select class="input" style=${{ height: 44, width: 'auto' }} value=${sort} onChange=${(e) => setSort(e.target.value)}><option value="date">Date</option><option value="amount">Amount</option><option value="name">Name</option></select></label>`}
         ${all.length > 0 && html`<div class="seg view-seg" role="radiogroup" aria-label="View">${[['calendar', 'Calendar view', 'calendar'], ['list', 'List view', 'list']].map(([id, l, ic]) => html`<button role="radio" aria-checked=${view === id} aria-label=${l} title=${l} onClick=${() => setView(id)}><${Icon} n=${ic} c="s" /></button>`)}</div>`}
       </div>
       <div class="row scroll-x" role="group" aria-label="Category">${[['all', 'All categories'], ...R.CATEGORIES.map((c) => [c.id, `${c.label} · ${all.filter((r) => r.category === c.id).length}`])].map(([id, l]) => html`<button class="chip" aria-pressed=${catF === id} onClick=${() => setCatF(id)}>${catF === id && html`<${Icon} n="check" c="s" />`}${l}</button>`)}</div>
     </div>
-    ${!items.length ? html`<div class="card empty"><span class="ic t-neutral"><${Icon} n="search" /></span><h2 class="h2">Nothing found</h2><p class="c2" style=${{ margin: 0 }}>${q ? `No reminders match “${q}”. ` : 'No reminders match these filters. '}Try another name, or reset filters.</p><${Btn} v="secondary" icon="reset" onClick=${resetF}>Reset filters<//></div>`
-    : view === 'calendar' ? calendar
+    ${searching && items.length > 0 && html`<div class="row search-head" role="status"><b>${items.length} result${items.length === 1 ? '' : 's'} for “${q.trim()}”</b><span class="grow"></span><button type="button" class="link" onClick=${() => setQ('')}>Clear search</button></div>`}
+    ${!items.length ? html`<div class="card empty"><span class="ic t-neutral"><${Icon} n="search" /></span><h2 class="h2">Nothing found</h2><p class="c2" style=${{ margin: 0 }}>${q ? `No reminders match “${q.trim()}”. ` : 'No reminders match these filters. '}${newTpls.length ? 'Not added yet?' : 'Try another name, or reset filters.'}</p>
+        <div class="row wrap" style=${{ justifyContent: 'center' }}>${newTpls.slice(0, 1).map((t) => html`<${Btn} icon="plus" onClick=${() => { try { sessionStorage.setItem('rr-tpl', t.name); } catch (e) { /* ok */ } go('new'); }}>Add ${t.name}<//>`)}<${Btn} v="secondary" icon="reset" onClick=${resetF}>${searching ? 'Clear search' : 'Reset filters'}<//></div></div>`
+    : view === 'calendar' && !searching ? calendar
     : groups.map(([g, rs]) => html`<section class="card list-card" aria-label=${g} key=${g}><div class="group-h">${g}<span class="c3" style=${{ fontWeight: 400 }}>${rs.length}</span></div>${rs.map((r) => html`<${Row} r=${r} ctx=${ctx} key=${r.id} />`)}</section>`)}`;
 }
 
