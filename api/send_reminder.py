@@ -90,12 +90,38 @@ def _validate(data):
     currency = r.get("currency", "USD")
     if currency not in CURRENCIES:
         return None, "Unknown currency."
-    return {"name": name.strip(), "date": date, "amount": float(amount), "cycle": cycle, "daysLeft": days, "id": rid, "currency": currency}, None
+    lang = r.get("lang", "en")
+    if lang not in LANGS:
+        return None, "Unknown language."
+    return {"name": name.strip(), "date": date, "amount": float(amount), "cycle": cycle, "daysLeft": days, "id": rid,
+            "currency": currency, "lang": lang}, None
 
 
-def _when(days):
+LANGS = ("uk", "en")
+
+
+def uk_plural(n, one, few, many):
+    """Ukrainian plural: 1 день, 2 дні, 5 днів (11–14 → днів)."""
+    n = abs(int(n)) % 100
+    if 10 < n < 20:
+        return many
+    d = n % 10
+    return one if d == 1 else few if 2 <= d <= 4 else many
+
+
+def uk_days(n):
+    return f"{n} {uk_plural(n, 'день', 'дні', 'днів')}"
+
+
+def _when(days, lang="en"):
     if days is None:
         return ""
+    if lang == "uk":
+        if days == 0:
+            return "сьогодні"
+        if days == 1:
+            return "завтра"
+        return f"через {uk_days(days)}" if days > 1 else f"{uk_days(-days)} тому"
     if days == 0:
         return "today"
     if days == 1:
@@ -108,9 +134,14 @@ def _when(days):
 APP_URL = os.environ.get("APP_URL", "https://renewduck.vercel.app")
 
 
-def _nice_date(iso):
+UK_MONTHS = ["січня", "лютого", "березня", "квітня", "травня", "червня", "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"]
+
+
+def _nice_date(iso, lang="en"):
     try:
         y, m, d = (int(x) for x in iso.split("-"))
+        if lang == "uk":
+            return f"{d} {UK_MONTHS[m - 1]} {y}"
         return f"{d} {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1]} {y}"
     except Exception:
         return iso
@@ -122,31 +153,50 @@ def reminder_link(r):
     return f"{APP_URL}/?open={rid}&act=open#/dashboard" if rid and ID_RE.match(str(rid)) else f"{APP_URL}/#/dashboard"
 
 
+UK_PER = {"weekly": "тиж.", "monthly": "міс.", "yearly": "рік", "one-time": ""}
+
+
 def build_email(r):
     """A plain, personal-looking email: spam filters dislike robotic subjects,
-    'demo' wording, missing text versions and no way to stop the emails."""
+    'demo' wording, missing text versions and no way to stop the emails.
+    In Ukrainian when the person uses the app in Ukrainian (r["lang"])."""
+    lang = r.get("lang", "en")
     name = html.escape(r["name"])
-    when = _when(r["daysLeft"])
-    per = CYCLES[r["cycle"]]
+    when = _when(r["daysLeft"], lang)
+    per = (UK_PER if lang == "uk" else CYCLES).get(r["cycle"], "")
     price = money_str(r["amount"], r.get("currency")) + (f" / {per}" if per and r["amount"] else "")
-    day = _nice_date(r["date"])
+    day = _nice_date(r["date"], lang)
+    link = reminder_link(r)
+    if lang == "uk":
+        w = {"hi": "Привіт!", "subject": f"Нагадування: {r['name']} — списання {when or 'скоро'} ({day})",
+             "head": f"{name}: списання {html.escape(when) if when else 'скоро'}", "head_t": f"{r['name']}: списання {when + ' — ' if when else ''}{day}.",
+             "date": "Дата списання", "amount": "Сума",
+             "decide": "Виріши до списання: залишити, скасувати на сайті сервісу чи відкласти рішення. Гроші люблять лік 😉",
+             "open_t": "Відкрити нагадування", "button": "Відкрити Renewal Reminder",
+             "why": "Ти отримуєш цей лист, бо налаштував(-ла) нагадування на email у Renewal Reminder. Щоб вимкнути, відкрий нагадування і обери канал «Браузер» або видали його."}
+    else:
+        w = {"hi": "Hi,", "subject": f"Reminder: {r['name']} renews {when or 'soon'} ({day})",
+             "head": f"{name} renews {html.escape(when) if when else 'soon'}", "head_t": f"{r['name']} renews {when + ' ' if when else ''}on {day}.",
+             "date": "Charge date", "amount": "Amount",
+             "decide": "Decide before the charge: keep it, cancel it on the service’s website, or postpone the decision.",
+             "open_t": "Open this reminder", "button": "Open Renewal Reminder",
+             "why": "You get this email because you set an email reminder for this renewal in Renewal Reminder. To stop it, open the reminder and switch it to Browser, or delete it."}
     # The charge date in the subject keeps different reminders apart in Gmail.
-    subject = f"Reminder: {r['name']} renews {when or 'soon'} ({day})"[:120]
-    text = (f"Hi,\n\n{r['name']} renews {when + ' ' if when else ''}on {day}."
-            + (f" Amount: {price}." if r["amount"] else "")
-            + "\n\nDecide before the charge: keep it, cancel it on the service's website, or postpone the decision."
-            + f"\n\nOpen this reminder: {reminder_link(r)}"
-            + "\n\nYou get this email because you set an email reminder for this renewal."
-            + " To stop it, open the reminder in the app and switch it to Browser, or delete it.")
-    body = f"""<!doctype html><html><body style="margin:0;padding:24px;background:#F6F5FB">
+    subject = w["subject"][:120]
+    text = (f"{w['hi']}\n\n{w['head_t']}"
+            + (f" {w['amount']}: {price}." if r["amount"] else "")
+            + f"\n\n{w['decide']}"
+            + f"\n\n{w['open_t']}: {link}"
+            + f"\n\n{w['why']}")
+    body = f"""<!doctype html><html lang="{lang}"><body style="margin:0;padding:24px;background:#F6F5FB">
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;color:#14142B">
-<p style="margin:0 0 12px;font-size:15px">Hi,</p>
-<h2 style="margin:0 0 12px;font-size:20px">{name} renews {html.escape(when) if when else 'soon'}</h2>
-<p style="margin:0 0 4px;font-size:15px">Charge date: <b>{html.escape(day)}</b></p>
-{f'<p style="margin:0 0 16px;font-size:15px">Amount: <b>{html.escape(price)}</b></p>' if r['amount'] else ''}
-<p style="margin:0 0 20px;font-size:15px">Decide before the charge: keep it, cancel it on the service’s website, or postpone the decision.</p>
-<p style="margin:0 0 24px"><a href="{html.escape(reminder_link(r))}" style="background:#16132B;color:#fff;text-decoration:none;padding:12px 20px;border-radius:999px;font-size:14px;display:inline-block">Open Renewal Reminder</a></p>
-<p style="margin:0;color:#6E7191;font-size:12px;line-height:1.5">You get this email because you set an email reminder for this renewal in Renewal Reminder. To stop it, open the reminder and switch it to Browser, or delete it.</p>
+<p style="margin:0 0 12px;font-size:15px">{w['hi']}</p>
+<h2 style="margin:0 0 12px;font-size:20px">{w['head']}</h2>
+<p style="margin:0 0 4px;font-size:15px">{w['date']}: <b>{html.escape(day)}</b></p>
+{f'<p style="margin:0 0 16px;font-size:15px">{w["amount"]}: <b>{html.escape(price)}</b></p>' if r['amount'] else ''}
+<p style="margin:0 0 20px;font-size:15px">{w['decide']}</p>
+<p style="margin:0 0 24px"><a href="{html.escape(link)}" style="background:#16132B;color:#fff;text-decoration:none;padding:12px 20px;border-radius:999px;font-size:14px;display:inline-block">{w['button']}</a></p>
+<p style="margin:0;color:#6E7191;font-size:12px;line-height:1.5">{w['why']}</p>
 </div></body></html>"""
     return subject, text, body
 

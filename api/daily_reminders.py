@@ -33,7 +33,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from send_reminder import build_email, mail_channel, friendly_send_error, SentLedger, sent_key, money_str  # noqa: E402  (shared email code)
+from send_reminder import uk_days, build_email, mail_channel, friendly_send_error, SentLedger, sent_key, money_str  # noqa: E402  (shared email code)
 
 TZ = "Europe/Kyiv"
 SCOPES = ["https://www.googleapis.com/auth/datastore", "https://www.googleapis.com/auth/identitytoolkit",
@@ -129,7 +129,9 @@ def merge_users(profiles, reminder_docs):
         merged.update(per.get(uid, {}))
         cur = fields.get("currency") if fields.get("currency") in ("USD", "EUR", "UAH") else "USD"
         # Each reminder may have its own currency; older ones use the profile's main currency.
-        out.append((uid, [{**r, "currency": r.get("currency") if r.get("currency") in ("USD", "EUR", "UAH") else cur}
+        # Emails and pushes use the profile's language (English for profiles from before languages).
+        lang = fields.get("lang") if fields.get("lang") in ("uk", "en") else "en"
+        out.append((uid, [{**r, "currency": r.get("currency") if r.get("currency") in ("USD", "EUR", "UAH") else cur, "lang": lang}
                           for r in merged.values()], fields.get("push") or []))
     return out
 
@@ -173,16 +175,27 @@ def lookup_emails(sa, token, uids):
 
 
 def notif_copy(r, n, follow_up=False):
-    """Notification wording (same rules as notifCopy in app.js)."""
+    """Notification wording (same rules as notifCopy in app.js), in the profile's language."""
     name = str(r.get("name", ""))[:80]
+    amount = r.get("amount") or 0
+    has_amount = isinstance(amount, (int, float)) and amount > 0
+    if r.get("lang") == "uk":
+        if follow_up:
+            return f"Час вирішити щодо {name}", "Ти просив(-ла) нагадати сьогодні. Це на хвилинку."
+        when = "сьогодні" if n <= 0 else "завтра" if n == 1 else f"через {uk_days(n)}"
+        if r.get("category") == "document":
+            return f"{name}: спливає {when}", ("Перевір, що потрібно для продовження." if n <= 0 else "Почни продовжувати вже зараз, щоб не спливло.")
+        per = {"weekly": " на тиждень", "monthly": " на місяць", "yearly": " на рік"}.get(r.get("cycle"), "")
+        ask = f"Ще варте {money_str(amount, r.get('currency'))}{per}?" if has_amount else "Ще потрібно?"
+        tail = "Виріши до списання." if n <= 0 else "Виріши до завтрашнього списання." if n == 1 else "Хвилинка — і вирішено."
+        return f"{name}: списання {when}", f"{ask} {tail}"
     if follow_up:
         return f"Time to decide on {name}", "You asked us to remind you today. It only takes a moment."
     when = "today" if n <= 0 else "tomorrow" if n == 1 else f"in {n} days"
     if r.get("category") == "document":
         return f"{name} expires {when}", ("Check what you need to renew it." if n <= 0 else "Start renewing it now, so it doesn’t run out.")
     per = {"weekly": " a week", "monthly": " a month", "yearly": " a year"}.get(r.get("cycle"), "")
-    amount = r.get("amount") or 0
-    ask = f"Still worth {money_str(amount, r.get('currency'))}{per}?" if isinstance(amount, (int, float)) and amount > 0 else "Still need it?"
+    ask = f"Still worth {money_str(amount, r.get('currency'))}{per}?" if has_amount else "Still need it?"
     tail = "Decide before you’re charged." if n <= 0 else "Decide before tomorrow’s charge." if n == 1 else "Take a moment to decide."
     return f"{name} renews {when}", f"{ask} {tail}"
 

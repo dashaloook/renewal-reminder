@@ -49,6 +49,11 @@ test('a reminder may have its own currency: USD, EUR or UAH', async () => {
   await assertFails(setDoc(doc(alice(), 'users/alice/reminders/r1'), rec('GBP')));
 });
 
+test('profile language must be uk or en', async () => {
+  for (const l of ['uk', 'en']) await assertSucceeds(setDoc(doc(alice(), 'users/alice'), { lang: l }));
+  await assertFails(setDoc(doc(alice(), 'users/alice'), { lang: 'de' }));
+});
+
 test('profile currency must be USD, EUR or UAH', async () => {
   for (const c of ['USD', 'EUR', 'UAH']) await assertSucceeds(setDoc(doc(alice(), 'users/alice'), { currency: c }));
   await assertFails(setDoc(doc(alice(), 'users/alice'), { currency: 'GBP' }));

@@ -1,6 +1,8 @@
 /* Renewal Reminder — interactive prototype (demo data only). React 18 + htm, no build step. */
 const { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } = React;
-const html = htm.bind(React.createElement);
+const L = window.RRI18n; // languages: L.t(text), L.lang(), L.locale()
+const html = htm.bind(L.h);
+const pw = (n, w) => (L.lang() === 'uk' ? L.plural(n, ...L.W[w]) : n === 1 ? w : w + 's'); // word for a count: 1 reminder / 5 нагадувань
 const R = window.RR;
 
 // ---------- helpers ----------
@@ -13,18 +15,18 @@ const money = (n, cur) => curSym(cur) + Number(n || 0).toLocaleString('en-US', {
 // Notification wording (same rules as the server's daily job, api/daily_reminders.py).
 const notifCopy = (r, followUp) => {
   const n = R.daysUntil(r.date); const name = r.name;
-  if (followUp) return { title: `Time to decide on ${name}`, body: 'You asked us to remind you today. It only takes a moment.' };
+  if (followUp) return { title: L.t(`Time to decide on ${name}`), body: L.t('You asked us to remind you today. It only takes a moment.') };
   const when = n <= 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`;
-  if (r.category === 'document') return { title: `${name} expires ${when}`, body: n <= 0 ? 'Check what you need to renew it.' : 'Start renewing it now, so it doesn’t run out.' };
+  if (r.category === 'document') return { title: L.t(`${name} expires ${when}`), body: L.t(n <= 0 ? 'Check what you need to renew it.' : 'Start renewing it now, so it doesn’t run out.') };
   const per = { weekly: ' a week', monthly: ' a month', yearly: ' a year' }[r.cycle] || '';
   const ask = Number(r.amount) > 0 ? `Still worth ${rMoney(r)}${per}?` : 'Still need it?';
-  return { title: `${name} renews ${when}`, body: `${ask} ${n <= 0 ? 'Decide before you’re charged.' : n === 1 ? 'Decide before tomorrow’s charge.' : 'Take a moment to decide.'}` };
+  return { title: L.t(`${name} renews ${when}`), body: `${L.t(ask)} ${L.t(n <= 0 ? 'Decide before you’re charged.' : n === 1 ? 'Decide before tomorrow’s charge.' : 'Take a moment to decide.')}` };
 };
 const remindTxt = (n) => (n === 0 ? 'on the day' : `${n} ${n === 1 ? 'day' : 'days'} before`);
 // Text where letters were replaced by “?” or “�” (copied from an app that lost them).
 const isPhone = () => { try { return matchMedia('(max-width: 860px)').matches; } catch (e) { return false; } };
 const garbled = (t) => /\?{3,}|\uFFFD/.test(t || '');
-const fmt = (s, opts) => { const d = R.parse(s); return d.toLocaleDateString('en-GB', opts || (d.getFullYear() === new Date().getFullYear() ? { day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long', year: 'numeric' })); };
+const fmt = (s, opts) => { const d = R.parse(s); return L.date(d, opts || (d.getFullYear() === new Date().getFullYear() ? { day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long', year: 'numeric' })); };
 const rel = (n) => n < -1 ? `${-n} days ago` : n === -1 ? 'Yesterday' : n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : `In ${n} days`;
 const tone = (n) => n <= 2 ? 'red' : n <= 7 ? 'amber' : 'neutral';
 const cat = (id) => R.CATEGORIES.find((c) => c.id === id) || R.CATEGORIES[0];
@@ -243,6 +245,8 @@ function App() {
   Object.assign(R.USER, { photo: '' }, state.user || DEMO_USER);
   R.CLOUD_ACCOUNT = isCloud(state.account);
   CUR = CURRENCIES.some((c) => c[0] === state.currency) ? state.currency : 'USD'; window.RR_CUR = CUR; R.setMain(CUR);
+  if ((state.lang === 'uk' || state.lang === 'en') && state.lang !== L.lang()) L.setLang(state.lang);
+  useEffect(() => { if (state.authed && !state.lang) update(() => ({ lang: L.lang() })); }, [state.authed, state.lang]);
   const reminders = QS === 'empty' ? [] : state.reminders;
   // Notifications count as "on" only if the browser really allows them on this device.
   const pushApi = window.RRPush;
@@ -340,7 +344,7 @@ function App() {
     update(() => ({ notif: true, bannerDismissed: true }));
     if (cloud && cloudUid && res.subscription) { try { await cloud.savePush(cloudUid, res.subscription); } catch (e) { /* not critical */ } }
     showToast('Notifications are on for this browser', res.error || (cloudUid ? 'We’ll notify this device on each reminder day, even when the app is closed.' : 'We’ll notify you on each reminder day while the app is open. Log in with a real account to get them when it’s closed.'), null);
-    pushApi.show('You’re all set', 'We’ll nudge you here before anything renews, so you can decide in time.', 'welcome');
+    pushApi.show(L.t('You’re all set'), L.t('We’ll nudge you here before anything renews, so you can decide in time.'), 'welcome');
   };
   // Signed in on a device that already allows notifications: keep its push subscription up to date.
   useEffect(() => { if (cloudUid && notifOn && pushApi) pushApi.enable().then((r) => r.subscription && cloud.savePush(cloudUid, r.subscription)).catch(() => {}); }, [cloudUid]);
@@ -418,7 +422,7 @@ function Shell({ ctx, page, children }) {
   const active = page === 'dashboard' ? 'dashboard' : 'reminders';
   useEffect(() => { if (!menu) return; const k = (e) => e.key === 'Escape' && setMenu(false); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [menu]);
   const Menu = () => html`<div class="menu" role="menu" style=${{ minWidth: 240 }}>
-    <div class="menu-cur" role="none"><${CurrencySwitch} ctx=${ctx} compact /></div><div class="menu-sep" role="separator"></div>
+    <div class="menu-cur" role="none"><${LangSwitch} ctx=${ctx} compact /><${CurrencySwitch} ctx=${ctx} compact /></div><div class="menu-sep" role="separator"></div>
     ${R.CLOUD_ACCOUNT && ctx.openDeleteAccount && html`<button role="menuitem" class="danger-item" onClick=${() => { setMenu(false); ctx.openDeleteAccount(); }}><${Icon} n="trash" c="s" />Delete account</button><div class="menu-sep" role="separator"></div>`}
     <button role="menuitem" onClick=${() => { setMenu(false); ctx.logout(); }}><${Icon} n="logout" c="s" />Log out</button></div>`;
   return html`<div class=${'app' + (page === 'new' || page === 'edit' ? ' is-form' : '')}>
@@ -445,6 +449,14 @@ function Shell({ ctx, page, children }) {
 }
 
 // $ / € / ₴ — one setting per account, saved with the profile.
+// Interface language. Ukrainian by default; saved in this browser and (for accounts) in the profile.
+function LangSwitch({ ctx, compact }) {
+  const lid = compact ? 'lang-lm' : 'lang-l';
+  const pick = (l) => { if (l === L.lang()) return; L.setLang(l); if (ctx && ctx.update) ctx.update(() => ({ lang: l })); else window.dispatchEvent(new Event('rr-rates')); };
+  return html`<div class=${'cur-switch' + (compact ? ' compact' : '')}><span class="small c2" id=${lid}>Language</span>
+    <div class="seg" role="radiogroup" aria-labelledby=${lid}>${L.LANGS.map(([code, label, short]) => html`<button type="button" role="radio" lang=${code} aria-checked=${L.lang() === code} aria-label=${label} title=${label} onClick=${() => pick(code)}>${short}</button>`)}</div></div>`;
+}
+
 function CurrencySwitch({ ctx, compact }) {
   // Switching converts every saved amount at today's rate (undo restores the old amounts).
   // Main currency = what totals are shown in. Each reminder keeps its own currency; old ones
@@ -469,7 +481,7 @@ function ProfileSheet({ ctx, onClose }) {
     <span class="sheet-grip" aria-hidden="true"></span>
     <div class="row gap12 sheet-head"><span class="avatar">${R.USER.photo ? html`<img src=${R.USER.photo} alt="" referrerpolicy="no-referrer" width="40" height="40" style=${{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />` : R.USER.initials}</span>
       <div class="grow col"><b id="ps-h">${R.USER.name}</b><span class="small c2" style=${{ overflow: 'hidden', textOverflow: 'ellipsis' }}>${R.USER.email}</span></div></div>
-    <${CurrencySwitch} ctx=${ctx} />
+    <${LangSwitch} ctx=${ctx} /><${CurrencySwitch} ctx=${ctx} />
     <div class="col sheet-actions">
       <button class="sheet-btn" data-autofocus onClick=${() => { onClose(); ctx.logout(); }}><${Icon} n="logout" c="s" />Log out</button>
       ${R.CLOUD_ACCOUNT && ctx.openDeleteAccount && html`<button class="sheet-btn danger" onClick=${() => { onClose(); ctx.openDeleteAccount(); }}><${Icon} n="trash" c="s" />Delete account</button>`}
@@ -696,6 +708,7 @@ function Login({ ctx, mode = 'login' }) {
         ${err.form && html`<span class="msg err" role="alert"><${Icon} n="info" c="xs" />${err.form}</span>`}
         <button type="submit" class=${'btn full ' + (mode === 'reset' || pwStep ? 'primary' : 'secondary')} disabled=${!!loading} aria-busy=${loading === 'form'}>${loading === 'form' ? html`<span class="spinner"></span>${t.busy}` : t.go}</button>
         ${pwStep && html`<span class="small c3" style=${{ textAlign: 'center' }}>We’ll email you a link to confirm your address. You need it to get reminder emails.</span>`}`}
+        <div class="login-lang"><${LangSwitch} compact /></div>
         <p class="c2" style=${{ margin: 0, textAlign: 'center' }}>${mode === 'login' ? html`No account yet? <a class="link" href="#/signup">Create one</a>`
           : mode === 'signup' ? html`Already have an account? <a class="link" href="#/login">Log in instead</a>`
           : html`Remembered it? <a class="link" href="#/login">Back to log in</a>`}</p>
@@ -704,7 +717,7 @@ function Login({ ctx, mode = 'login' }) {
     <aside class="login-side" aria-label="Why Renewal Reminder">
       <img class="mascot" src="duck-wave.png" width="240" height="240" alt="" />
       <div class="card pad24 col gap12" style=${{ width: '100%', boxShadow: 'var(--shadow-m)', border: 0 }}>
-        <div class="row" style=${{ justifyContent: 'space-between' }}><span class="small c3">${R.today().toLocaleDateString('en-GB', { month: 'long' })} so far</span><span class="badge t-brand">Demo data</span></div>
+        <div class="row" style=${{ justifyContent: 'space-between' }}><span class="small c3">${`${L.date(R.today(), { month: 'long' })} so far`}</span><span class="badge t-brand">Demo data</span></div>
         <div class="row gap12"><span class="logo" style=${{ background: 'var(--success-subtle)', color: 'var(--success)' }}><${Icon} n="circle-check" /></span><b class="h3">No unwanted charges this month</b></div>
         <p class="c2" style=${{ margin: 0 }}>7 of 8 renewals were decided before the charge date. Every “keep” and “cancel” was a choice, not an accident.</p>
       </div>
@@ -717,13 +730,13 @@ function Dashboard({ ctx }) {
   const { state } = ctx; const loading = useLoading('dash');
   const [chartErr, setChartErr] = useState((QS === 'error' || ctx.state.loadFail || !navigator.onLine)); const [retrying, setRetrying] = useState(false);
   const list = state.reminders;
-  const a = useMemo(() => R.analytics(list), [list, CUR, R.RATES.USD, R.RATES.EUR]); // totals in the main currency
+  const a = useMemo(() => R.analytics(list), [list, CUR, R.RATES.USD, R.RATES.EUR, L.lang()]); // totals in the main currency
   const mixedNote = new Set(list.filter((r) => Number(r.amount)).map(R.curOf)).size > 1 ? ` · in ${CUR} at today’s rate` : '';
   const unfinished = list.filter((r) => r.status === 'unfinished').sort((x, y) => x.date.localeCompare(y.date));
   const upcoming = list.filter((r) => r.status !== 'cancelled' && R.daysUntil(r.date) >= 0).sort((x, y) => x.date.localeCompare(y.date));
   const next = upcoming[0];
   const hour = new Date().getHours(); const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const dateStr = R.today().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const dateStr = L.date(R.today(), { weekday: 'long', day: 'numeric', month: 'long' });
   if (loading) return html`<div class="col gap16" aria-busy="true"><div class="row c2"><span class="spinner"></span>Loading your reminders…</div><${Skel} w="320px" h=${32} /><div class="hero"><${Skel} w="220px" h=${24} /><div class="ucards">${[0, 1].map(() => html`<div class="ucard"><${Skel} w="60%" /><${Skel} h=${48} /><${Skel} w="70%" h=${32} /></div>`)}</div></div><div class="kpis">${[0, 1, 2, 3].map(() => html`<div class="card kpi"><${Skel} w="50%" h=${12} /><${Skel} w="70%" h=${28} style=${{ marginTop: 8 }} /></div>`)}</div></div>`;
   if (!list.length) return html`<div class="col gap4"><h1 class="h1">Welcome, ${R.USER.first}</h1><p class="body-l c2" style=${{ margin: 0 }}>Let’s add the first thing you don’t want to renew by accident.</p></div><${EmptyState} />`;
   return html`
@@ -782,7 +795,7 @@ const NoteLine = ({ note, row, card }) => (note && note.trim()) ? html`<div clas
 function Row({ r, ctx, isNew }) {
   // A div (not a <button>) so its text can be selected and copied; selecting doesn't open the details.
   const open = () => { const sel = window.getSelection && String(window.getSelection()); if (!sel || !sel.trim()) ctx.openDrawer(r.id); };
-  return html`<div class=${'rrow' + (isNew ? ' is-new' : '')} role="button" tabindex="0" onClick=${open} onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ctx.openDrawer(r.id); } }} aria-label=${`${isNew ? 'New reminder, ' : ''}${r.name}, ${amountLine(r)}, ${fmt(r.date)}, ${rel(R.daysUntil(r.date))}, ${r.status === 'unfinished' ? 'unfinished decision: ' + r.reason : r.status}${r.note ? ', note: ' + r.note : ''}`}>
+  return html`<div class=${'rrow' + (isNew ? ' is-new' : '')} role="button" tabindex="0" onClick=${open} onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ctx.openDrawer(r.id); } }} aria-label=${`${isNew ? L.t('New reminder') + ', ' : ''}${L.t(r.name)}, ${L.t(amountLine(r))}, ${fmt(r.date)}, ${L.t(rel(R.daysUntil(r.date)))}, ${r.status === 'unfinished' ? L.t('unfinished decision') + ': ' + L.t(r.reason) : L.t(r.status)}${r.note ? ', ' + L.t('note') + ': ' + L.t(r.note) : ''}`}>
     <${Logo} r=${r} /><span class="nm grow col" style=${{ gap: 2 }}><span class="nm-line"><b class="h3" style=${{ fontSize: 16 }}>${r.name}</b><span class="nm-cat">/ ${cat(r.category).one}</span></span><${NoteLine} note=${r.note} row />${r.status === 'unfinished' && html`<span class="small cb row gap4 reason-inline"><${Icon} n="hourglass" c="xs" />Postponed: ${r.reason}</span>`}${(isNew || r.status === 'kept' || r.status === 'cancelled') && html`<span class="st-inline">${isNew ? html`<span class="badge t-brand">New</span>` : html`<${StatusBadge} r=${r} />`}</span>`}</span>
     <span class="amt"><b class="h3" style=${{ fontSize: 16, display: 'block' }}>${r.amount ? rMoney(r) : '—'}</b><span class="small c3">${r.category === 'document' ? 'Expires' : cyc(r.cycle).label}</span><span class="mob-badge"><${UrgBadge} r=${r} /></span></span>
     <span class="when"><span class="date">${fmt(r.date)}</span><${UrgBadge} r=${r} /></span><span class="st">${isNew ? html`<span class="badge t-brand">New</span>` : html`<${StatusBadge} r=${r} />`}${r.status === 'unfinished' && r.reason && html`<span class="st-reason">Postponed: ${r.reason}</span>`}</span><span class="chev c3"><${Icon} n="chevron-right" /></span>
@@ -996,7 +1009,7 @@ function DateField({ id, value, onChange, min, max, className = '', height, desc
     if (n) { e.preventDefault(); go2(R.iso(n)); }
   };
   const shift = (k) => setMonth(new Date(month.getFullYear(), month.getMonth() + k, 1));
-  const label = month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const label = L.date(month, { month: 'long', year: 'numeric' });
   return html`<div class="datefield" ref=${wrap}>
     <button type="button" id=${id} class=${'input datebtn ' + className + (open ? ' open' : '')} style=${height ? { height } : undefined} aria-haspopup="dialog" aria-expanded=${open} aria-invalid=${invalid ? 'true' : undefined} aria-describedby=${describedBy} onClick=${() => (open ? setOpen(false) : openIt())} onKeyDown=${(e) => { if ((e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') && !open) { e.preventDefault(); openIt(); } }}>
       <span class=${'grow' + (value ? '' : ' c3')}>${value ? fmt(value, { day: 'numeric', month: 'long', year: 'numeric' }) : placeholder}</span><${Icon} n="calendar" c="s" /></button>
@@ -1005,7 +1018,7 @@ function DateField({ id, value, onChange, min, max, className = '', height, desc
       <div class="dp-grid" role="grid" aria-label=${label} ref=${gridRef}>
         ${WEEK_S.map((w) => html`<span class="dp-wd" aria-hidden="true" key=${w}>${w}</span>`)}
         ${cells.map((d) => { const iso = R.iso(d); const out = d.getMonth() !== month.getMonth(); const dis = !ok(iso);
-          return html`<button type="button" key=${iso} data-d=${iso} role="gridcell" class=${'dp-day' + (out ? ' out' : '') + (iso === value ? ' sel' : '') + (iso === todayIso ? ' today' : '')} disabled=${dis} tabindex=${iso === focus ? 0 : -1} aria-selected=${iso === value} aria-current=${iso === todayIso ? 'date' : undefined} aria-label=${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (iso === todayIso ? ', today' : '')} onClick=${() => pick(iso)}>${d.getDate()}</button>`; })}
+          return html`<button type="button" key=${iso} data-d=${iso} role="gridcell" class=${'dp-day' + (out ? ' out' : '') + (iso === value ? ' sel' : '') + (iso === todayIso ? ' today' : '')} disabled=${dis} tabindex=${iso === focus ? 0 : -1} aria-selected=${iso === value} aria-current=${iso === todayIso ? 'date' : undefined} aria-label=${L.date(d, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + (iso === todayIso ? ', ' + L.t('today') : '')} onClick=${() => pick(iso)}>${d.getDate()}</button>`; })}
       </div>
       <div class="dp-foot"><span class="small c3">Arrow keys move · Enter picks · Esc closes</span></div>
     </div>`}
@@ -1143,7 +1156,7 @@ const occOf = (r, from, to) => {
   return R.occurrences(r, from, to);
 };
 const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const monthName = (d) => d.toLocaleDateString('en-GB', { month: 'long' });
+const monthName = (d) => L.date(d, { month: 'long' });
 const firstOf = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
 const take = (k) => { try { const v = sessionStorage.getItem(k); sessionStorage.removeItem(k); return v; } catch (e) { return null; } };
 
@@ -1205,7 +1218,7 @@ function ListScreen({ ctx }) {
   const sumLine = (list) => { const s = live(list).reduce((a, o) => a + R.inMain(o.r), 0); return s ? ' · ' + money(s) : ''; };
   const dueLine = (list) => { const n = live(list).length; const c = list.length - n; return [n ? `${n} due${sumLine(list)}` : '', c ? `${c} cancelled` : ''].filter(Boolean).join(' · ') || 'Nothing due'; };
 
-  const header = html`<div class="page-head"><div class="row gap12 wrap ph-row" style=${{ alignItems: 'baseline' }}><h1 class="h1">My reminders</h1><div class="row c2 ph-meta"><span>${all.length} <span class="on-desk">reminder${all.length === 1 ? '' : 's'}</span><span class="on-phone">all</span></span>${counts.unfinished > 0 && html`<span aria-hidden="true"> · </span><button type="button" class="badge t-brand badge-btn" aria-pressed=${status === 'unfinished'} aria-label=${`${counts.unfinished} need${counts.unfinished === 1 ? 's' : ''} a decision. Show only these`} title="Show only unfinished decisions" onClick=${() => { setQ(''); setCatF('all'); setStatus('unfinished'); }}><${Icon} n="hourglass" />${counts.unfinished} need${counts.unfinished === 1 ? 's' : ''} a decision</button>`}</div></div><${Btn} sm icon="plus" class="ph-add" onClick=${() => go('new')}>Add reminder<//></div>`;
+  const header = html`<div class="page-head"><div class="row gap12 wrap ph-row" style=${{ alignItems: 'baseline' }}><h1 class="h1">My reminders</h1><div class="row c2 ph-meta"><span>${all.length} <span class="on-desk">${pw(all.length, 'reminder')}</span><span class="on-phone">${L.t('all')}</span></span>${counts.unfinished > 0 && html`<span aria-hidden="true"> · </span><button type="button" class="badge t-brand badge-btn" aria-pressed=${status === 'unfinished'} aria-label=${`${counts.unfinished} need${counts.unfinished === 1 ? 's' : ''} a decision. Show only these`} title="Show only unfinished decisions" onClick=${() => { setQ(''); setCatF('all'); setStatus('unfinished'); }}><${Icon} n="hourglass" />${`${counts.unfinished} need${counts.unfinished === 1 ? 's' : ''} a decision`}</button>`}</div></div><${Btn} sm icon="plus" class="ph-add" onClick=${() => go('new')}>Add reminder<//></div>`;
   if (loading) return html`${header}<div class="card pad20"><${Skel} h=${40} /></div><div class="card pad20 col gap12" aria-busy="true"><${Skel} w="200px" h=${28} /><div class="cal-grid">${[...Array(35)].map(() => html`<${Skel} h=${72} style=${{ borderRadius: 8 }} />`)}</div></div>`;
   if (err) return html`${header}<div class="card empty"><span class="ic t-amber"><${Icon} n="alert" /></span><h2 class="h2">We couldn’t load your reminders</h2><p class="c2" style=${{ margin: 0 }}>Your data is safe. Check your connection and try again.</p><${Btn} v="secondary" icon="refresh" loading=${retry} onClick=${() => { setRetry(true); setTimeout(() => { setRetry(false); if (navigator.onLine) { QS = QS === 'error' ? null : QS; ctx.update(() => ({ loadFail: false })); setErr(false); } }, 700); }}>Try again<//></div>`;
   if (!all.length) return html`${header}<${EmptyState} />`;
@@ -1213,7 +1226,7 @@ function ListScreen({ ctx }) {
   const cells = [...Array(weeks * 7)].map((_, i) => {
     const d = R.addDays(gStart, i); const iso = R.iso(d); const list = byDay[iso] || [];
     const out = iso.slice(0, 7) !== mKey; const past = iso < todayIso; const isToday = iso === todayIso; const n = R.daysUntil(iso); const isNewDay = newDate === iso && list.some((o) => o.r.id === newId);
-    const label = `${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${isToday ? ', today' : ''}: ${list.length ? list.length + ' due — ' + list.map((o) => `${o.r.name}${o.r.amount ? ' ' + rMoney(o.r) : ''}${o.r.id === newId ? ', new' : ''}${o.r.status === 'unfinished' ? ', unfinished decision' : o.r.status === 'cancelled' ? ', cancelled' : ''}`).join('; ') : 'nothing due'}`;
+    const label = `${L.date(d, { weekday: 'long', day: 'numeric', month: 'long' })}${isToday ? ', ' + L.t('today') : ''}: ${list.length ? L.t(`${list.length} due`) + ' — ' + list.map((o) => `${L.t(o.r.name)}${o.r.amount ? ' ' + rMoney(o.r) : ''}${o.r.id === newId ? ', ' + L.t('new') : ''}${o.r.status === 'unfinished' ? ', ' + L.t('unfinished decision') : o.r.status === 'cancelled' ? ', ' + L.t('cancelled') : ''}`).join('; ') : L.t('nothing due')}`;
     const urgent = n >= 0 && n <= 2;
     return html`<button type="button" key=${iso} data-day=${iso} class=${'cal-day' + (out ? ' out' : '') + (past ? ' past' : '') + (isToday ? ' today' : '') + (iso === sel ? ' sel' : '') + (list.length ? ' has' : '')} tabindex=${iso === sel ? 0 : -1} aria-pressed=${iso === sel} aria-label=${label} onClick=${() => pick(iso)}>
       <span class="cal-top" aria-hidden="true"><span class="cal-num">${d.getDate()}</span>${isNewDay ? html`<span class="cal-tag new">New</span>` : isToday ? html`<span class="cal-tag">Today</span>` : n === 1 ? html`<span class="cal-tag soft">Tomorrow</span>` : ''}</span>
@@ -1226,24 +1239,24 @@ function ListScreen({ ctx }) {
 
   const calendar = html`<section class="card cal" aria-labelledby="cal-h">
       <div class="cal-head">
-        <div class="col cal-name"><h2 class="h2 cal-title" id="cal-h" aria-live="polite">${month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</h2>
+        <div class="col cal-name"><h2 class="h2 cal-title" id="cal-h" aria-live="polite">${L.date(month, { month: 'long', year: 'numeric' })}</h2>
           <span class="c2 small">${monthDue.length ? `${monthDue.length} due in ${monthName(month)}${monthSum ? ' · ' + money(monthSum) : ''}` : `Nothing due in ${monthName(month)}`}</span></div>
         <div class="row cal-nav"><button class="icon-btn" aria-label="Go to today" title="Today" disabled=${atToday} onClick=${() => pick(todayIso, true)}><${Icon} n="calendar-today" /></button><button class="icon-btn" aria-label="Previous month" onClick=${() => shiftMonth(-1)}><${Icon} n="chevron-left" /></button><button class="icon-btn" aria-label="Next month" onClick=${() => shiftMonth(1)}><${Icon} n="chevron-right" /></button></div>
       </div>
-      <div class="cal-grid" role="group" aria-label=${`${month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}. Use arrow keys to move between days, Page Up and Page Down to change month.`} onKeyDown=${onKey}>
+      <div class="cal-grid" role="group" aria-label=${`${L.date(month, { month: 'long', year: 'numeric' })}. ${L.t('Use arrow keys to move between days, Page Up and Page Down to change month.')}`} onKeyDown=${onKey}>
         ${WEEK.map((w) => html`<span class="cal-wd" aria-hidden="true" key=${w}>${w}</span>`)}${cells}
       </div>
       <p class="small c3 cal-hint">Arrow keys move between days · Page Up / Page Down change month · Enter opens a reminder below</p>
     </section>
     <section class="card list-card" aria-labelledby="day-h">
-      <div class="group-h"><span id="day-h">${selD.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${sel === todayIso ? ' · Today' : ''}</span><span class="c3" style=${{ fontWeight: 400 }}>${dueLine(dayItems)}</span></div>
+      <div class="group-h"><span id="day-h">${L.date(selD, { weekday: 'long', day: 'numeric', month: 'long' })}${sel === todayIso ? ' · Today' : ''}</span><span class="c3" style=${{ fontWeight: 400 }}>${dueLine(dayItems)}</span></div>
       ${dayItems.length ? dayItems.map((o) => html`<${Row} r=${{ ...o.r, date: o.iso }} ctx=${ctx} isNew=${o.r.id === newId} key=${o.r.id + o.iso} />`)
       : html`<div class="day-empty"><span class="c2">Nothing is due on this day.</span>${nx && html`<button class="link" onClick=${() => pick(nx.iso, true)}>Next: ${nx.r.name} · ${fmt(nx.iso)}<${Icon} n="arrow-right" c="xs" /></button>`}</div>`}
     </section>
     <section class="card list-card" aria-labelledby="rest-h">
-      <div class="group-h"><span id="rest-h">${dayItems.length || inMonth.length ? 'Also in ' : 'In '}${monthName(month)}</span><span class="c3" style=${{ fontWeight: 400 }}>${dueLine(rest)}</span></div>
+      <div class="group-h"><span id="rest-h">${dayItems.length || inMonth.length ? `Also in ${monthName(month)}` : `In ${monthName(month)}`}</span><span class="c3" style=${{ fontWeight: 400 }}>${dueLine(rest)}</span></div>
       ${rest.length ? rest.map((o) => html`<${Row} r=${{ ...o.r, date: o.iso }} ctx=${ctx} isNew=${o.r.id === newId} key=${o.r.id + o.iso} />`)
-      : html`<div class="day-empty"><span class="c2">Nothing else is due in ${monthName(month)}.</span>${nxMonth && html`<button class="link" onClick=${() => pick(nxMonth.iso, true)}>Next: ${nxMonth.r.name} · ${fmt(nxMonth.iso, { day: 'numeric', month: 'long', year: 'numeric' })}<${Icon} n="arrow-right" c="xs" /></button>`}</div>`}
+      : html`<div class="day-empty"><span class="c2">${`Nothing else is due in ${monthName(month)}.`}</span>${nxMonth && html`<button class="link" onClick=${() => pick(nxMonth.iso, true)}>Next: ${nxMonth.r.name} · ${fmt(nxMonth.iso, { day: 'numeric', month: 'long', year: 'numeric' })}<${Icon} n="arrow-right" c="xs" /></button>`}</div>`}
     </section>`;
 
   return html`${header}
@@ -1263,7 +1276,7 @@ function ListScreen({ ctx }) {
       </div>
       <div class="row scroll-x" role="group" aria-label="Category">${[['all', 'All categories'], ...R.CATEGORIES.map((c) => [c.id, `${c.label} · ${all.filter((r) => r.category === c.id).length}`])].map(([id, l]) => html`<button class="chip" aria-pressed=${catF === id} onClick=${() => setCatF(id)}>${catF === id && html`<${Icon} n="check" c="s" />`}${l}</button>`)}</div>
     </div>
-    ${searching && items.length > 0 && html`<div class="row search-head" role="status"><b>${items.length} result${items.length === 1 ? '' : 's'} for “${q.trim()}”</b><span class="grow"></span><button type="button" class="link" onClick=${() => setQ('')}>Clear search</button></div>`}
+    ${searching && items.length > 0 && html`<div class="row search-head" role="status"><b>${`${items.length} result${items.length === 1 ? '' : 's'} for “${q.trim()}”`}</b><span class="grow"></span><button type="button" class="link" onClick=${() => setQ('')}>Clear search</button></div>`}
     ${!items.length ? html`<div class="card empty"><span class="ic t-neutral"><${Icon} n="search" /></span><h2 class="h2">Nothing found</h2><p class="c2" style=${{ margin: 0 }}>${q ? `No reminders match “${q.trim()}”. ` : 'No reminders match these filters. '}${newTpls.length ? 'Not added yet?' : 'Try another name, or reset filters.'}</p>
         <div class="row wrap" style=${{ justifyContent: 'center' }}>${newTpls.slice(0, 1).map((t) => html`<${Btn} icon="plus" onClick=${() => { try { sessionStorage.setItem('rr-tpl', t.name); } catch (e) { /* ok */ } go('new'); }}>Add ${t.name}<//>`)}<${Btn} v="secondary" icon="reset" onClick=${resetF}>${searching ? 'Clear search' : 'Reset filters'}<//></div></div>`
     : view === 'calendar' && !searching ? calendar

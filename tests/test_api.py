@@ -316,6 +316,29 @@ class CurrencyTests(unittest.TestCase):
         cur = {uid: rs[0]["currency"] for uid, rs, _ in users}
         self.assertEqual(cur, {"a": "EUR", "b": "USD"})
 
+    def test_email_in_ukrainian(self):
+        r, err = s._validate({"reminder": {"name": "Megogo", "date": "2026-12-03", "amount": 99, "cycle": "monthly", "daysLeft": 5, "currency": "UAH", "lang": "uk"}})
+        self.assertIsNone(err)
+        subject, text, body = s.build_email(r)
+        self.assertIn("Нагадування: Megogo — списання через 5 днів (3 грудня 2026)", subject)
+        self.assertIn("₴99.00 / міс.", text)
+        self.assertIn('lang="uk"', body)
+        self.assertIn("Відкрити Renewal Reminder", body)
+
+    def test_unknown_language_is_rejected(self):
+        _, err = s._validate({"reminder": {"name": "N", "date": "2026-12-03", "lang": "de"}})
+        self.assertEqual(err, "Unknown language.")
+
+    def test_ukrainian_plurals(self):
+        self.assertEqual([s.uk_days(n) for n in (1, 2, 5, 11, 21, 22)], ["1 день", "2 дні", "5 днів", "11 днів", "21 день", "22 дні"])
+
+    def test_push_in_the_profiles_language(self):
+        users = d.merge_users({"a": {"lang": "uk"}, "b": {}}, [("a", {"id": "x", "name": "Netflix", "amount": 7.99, "cycle": "monthly"}),
+                                                              ("b", {"id": "y", "name": "Netflix", "amount": 7.99, "cycle": "monthly"})])
+        rs = {uid: rs[0] for uid, rs, _ in users}
+        self.assertEqual(d.notif_copy(rs["a"], 3), ("Netflix: списання через 3 дні", "Ще варте $7.99 на місяць? Хвилинка — і вирішено."))
+        self.assertEqual(d.notif_copy(rs["b"], 1)[0], "Netflix renews tomorrow")   # profiles from before languages: English
+
     def test_daily_job_keeps_each_reminders_own_currency(self):
         users = d.merge_users({"a": {"currency": "EUR"}}, [("a", {"id": "x", "name": "N", "currency": "UAH"}),
                                                           ("a", {"id": "y", "name": "M"}), ("a", {"id": "z", "name": "K", "currency": "GBP"})])

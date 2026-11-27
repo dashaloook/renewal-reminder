@@ -439,3 +439,35 @@ def test_changing_form_currency_converts_the_typical_price(page: Page, base_url,
     page.locator("#f-amount").fill("750")
     page.get_by_label("Currency").select_option("EUR")
     expect(page.locator("#f-amount")).to_have_value("750")                    # typed by the person: kept
+
+
+def test_ukrainian_by_default_and_switch_to_english(page: Page, base_url, errors):
+    page.add_init_script("try{if(!sessionStorage.getItem('t-lang')){localStorage.removeItem('rr-lang');sessionStorage.setItem('t-lang','1')}}catch(e){}")
+    page.goto(base_url + "/")
+    expect(page.get_by_role("heading", name="Увійти")).to_be_visible()                      # a new visitor sees Ukrainian
+    expect(page.locator("html")).to_have_attribute("lang", "uk")
+    page.get_by_role("radio", name="English").click()
+    expect(page.get_by_role("heading", name="Log in")).to_be_visible()
+    page.reload()
+    expect(page.get_by_role("heading", name="Log in")).to_be_visible()                      # the choice is remembered
+    page.get_by_role("radio", name="Українська").click()
+    page.get_by_role("button", name="Спробувати демо без реєстрації").click()
+    expect(page.get_by_role("heading", name="Жодних несподіваних списань.")).to_be_visible()
+    page.get_by_role("button", name="Пропустити").click()
+    expect(page.get_by_role("heading", name=re.compile("^(Доброго ранку|Добрий день|Добрий вечір)"))).to_be_visible()
+    expect(page.get_by_text("Netflix").first).to_be_visible()                                # brand names stay as they are
+    page.goto(base_url + "/#/reminders")
+    page.get_by_role("radio", name="Список").click()
+    expect(page.locator(".rrow", has_text="Абонемент у спортзал")).to_contain_text("Через 26 днів")
+    assert page.evaluate("[...RR_MISSES].filter(s => !/@|\\.(com|net|tv)$/.test(s))") == []   # nothing left untranslated
+
+
+def test_language_switch_in_profile(page: Page, base_url, errors):
+    start_demo(page, base_url)
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.locator(".profile-btn").click()
+    page.get_by_role("radiogroup", name="Language").get_by_role("radio", name="Українська").click()
+    expect(page.get_by_role("link", name="Мої нагадування").first).to_be_visible()
+    page.locator(".profile-btn").click() if page.get_by_role("radiogroup", name="Мова").count() == 0 else None
+    page.get_by_role("radiogroup", name="Мова").get_by_role("radio", name="English").click()
+    expect(page.get_by_role("link", name="My reminders").first).to_be_visible()
