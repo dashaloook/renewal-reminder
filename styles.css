@@ -503,3 +503,39 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
 .clear-btn::before{content:'';position:absolute;inset:-8px}  /* 44px touch area */
 .clear-btn:hover{background:var(--border);color:var(--text)}
 .clear-btn:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+
+/* Calendar header: month and summary on the left, Today / previous / next on the right */
+.cal-head{flex-wrap:nowrap;align-items:flex-start}
+.cal-name{gap:2px;min-width:0}
+.cal-name .cal-title{text-align:left;min-width:0}
+.cal-nav{gap:6px;flex:none}
+.cal-nav .icon-btn:disabled,.dp-head .icon-btn:disabled{opacity:.35;cursor:default}
+/* Date picker: opens to the left of the field when there is no room on the right */
+.dp-head .dp-title{padding-left:6px}
+@media (hover:none),(max-width:860px){.dp-foot{display:none}}  /* keyboard hint only where there is a keyboard */
+/* iPhone Safari zooms in when a field's text is under 16px: keep 16px on phones */
+@media (max-width:860px),(hover:none){.filters-card .input,.filters-card select.input{font-size:16px}}
+
+/* ---- Create / edit reminder on phones (Mobbin: Perplexity, Slack — fixed Cancel/Save, no tab bar) ---- */
+.form-bar,.notif-inline{display:none}
+@media (max-width:860px){
+  .is-form .bottom-bar,.is-form .fab{display:none}
+  .is-form .main{padding-bottom:calc(140px + env(safe-area-inset-bottom, 0px))}
+  .form-layout .preview{display:none}          /* the summary line in the bar replaces the big preview */
+  .form-actions{display:none}
+  .notif-inline{display:block;margin-top:8px}
+  .form-bar{display:flex;flex-direction:column;gap:8px;position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--muted);box-shadow:0 -6px 20px rgba(22,19,43,.06);padding:10px 16px calc(env(safe-area-inset-bottom, 0px) + 12px)}
+  .form-bar-sum{display:block;min-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .form-bar-sum .icon{color:var(--brand);vertical-align:-2px;margin-right:6px}
+  .form-bar .btn{min-height:48px}
+}
+
+/* My reminders title on phones: counts on the right of the title ("17 all · 3 need a decision") */
+.on-phone{display:none}
+@media (max-width:860px){
+  .on-desk{display:none}.on-phone{display:inline}
+  .ph-row{flex-wrap:wrap!important;justify-content:space-between;align-items:center!important;width:100%;row-gap:4px!important}
+  .ph-row .h1{font-size:26px;line-height:32px;white-space:nowrap}
+  .ph-meta{flex-wrap:wrap;justify-content:flex-end;text-align:right;gap:4px 6px;font-size:14px}
+  .ph-meta .badge-btn{white-space:nowrap}
+}

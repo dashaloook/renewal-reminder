@@ -241,3 +241,32 @@ def test_note_grows_and_clear_button_empties_it(page: Page, base_url, errors):
     page.get_by_role("button", name="Clear note").click()
     expect(note).to_have_value("")
     expect(note).to_be_focused()
+
+
+def test_phone_sheet_log_out_works(page: Page, base_url, errors):
+    page.set_viewport_size({"width": 390, "height": 844})
+    start_demo(page, base_url)
+    page.get_by_role("button", name="Profile").click()
+    page.get_by_role("dialog", name="Alex Koval").get_by_role("button", name="Log out").click()
+    expect(page.get_by_role("heading", name="Log in")).to_be_visible()
+
+
+def test_phone_form_has_fixed_save_bar_and_no_tab_bar(page: Page, base_url, errors):
+    page.set_viewport_size({"width": 390, "height": 844})
+    start_demo(page, base_url)
+    page.goto(base_url + "/#/new")
+    page.locator(".chip", has_text="Enter manually").click()
+    expect(page.locator(".bottom-bar")).to_be_hidden()
+    bar = page.locator(".form-bar")
+    expect(bar).to_be_visible()
+    page.locator("#f-name").fill("QA Bar")
+    pick_date(page, "f-date", iso(20))
+    expect(bar).to_contain_text("We’ll remind you on")
+    bar.get_by_role("button", name="Save reminder").click()
+    expect(page.get_by_role("dialog", name=re.compile("Added"))).to_be_visible()
+
+
+def test_statistics_hide_categories_without_costs(page: Page, base_url, errors):
+    start_demo(page, base_url)
+    card = page.locator(".card", has=page.get_by_role("heading", name="Spend by category"))
+    expect(card).not_to_contain_text("No cost")
