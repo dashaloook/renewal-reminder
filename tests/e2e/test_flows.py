@@ -79,18 +79,30 @@ def test_onboarding_adds_picked_services(page: Page, base_url, errors):
     expect(page.get_by_role("heading", name="No more surprise charges.")).to_be_visible()
     page.get_by_role("button", name="Let’s find yours").click()
     expect(page.get_by_role("heading", name="What do you pay for?")).to_be_visible()
-    expect(page.get_by_role("button", name="Add 3 reminders")).to_be_visible()  # the demo suggests three
-    page.get_by_role("button", name=re.compile("^Netflix")).click()             # remove Netflix
+    expect(page.get_by_role("button", name="Add 1 reminder")).to_be_visible()     # only the first service is preselected
+    expect(page.locator(".onb3-svc.on")).to_have_count(1)
+    expect(page.locator(".onb3-svc.on")).to_contain_text("Netflix")
     page.get_by_role("button", name=re.compile("^Disney\\+")).click()          # add Disney+
     page.get_by_role("radiogroup", name="Disney+ plan").get_by_role("radio", name=re.compile("Premium")).click()
+    page.get_by_role("button", name=re.compile("^Claude")).click()              # add Claude
+    page.get_by_role("radiogroup", name="Claude plan").get_by_role("radio", name=re.compile("Max 5")).click()
     page.get_by_role("button", name="Add 3 reminders").click()
     expect(page.get_by_role("heading", name="You’re covered 🎉")).to_be_visible()
-    expect(page.locator(".onb3-sum")).to_contain_text("Disney+")
-    expect(page.locator(".onb3-sum")).to_contain_text("Premium")
+    for text in ("Netflix", "Disney+", "Premium", "Claude", "Max 5"):
+        expect(page.locator(".onb3-sum")).to_contain_text(text)
     page.get_by_role("button", name="Go to my dashboard").click()
     expect(page).to_have_url(re.compile(r"#/dashboard$"))
     page.goto(base_url + "/#/reminders")
     expect(find(page, "Disney+")).to_contain_text("€13.99")
+    expect(find(page, "Claude")).to_contain_text("€90.00")
+
+
+def test_claude_is_listed_right_after_chatgpt(page: Page, base_url, errors):
+    page.goto(base_url + "/")
+    page.get_by_role("button", name="Try the demo without signing up").click()
+    page.get_by_role("button", name="Let’s find yours").click()
+    names = page.locator(".onb3-svc-head b").all_inner_texts()
+    assert names.index("Claude") == names.index("ChatGPT") + 1, names
 
 
 def test_add_reminder_shows_in_list_with_note(page: Page, base_url, errors):
