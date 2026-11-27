@@ -599,3 +599,10 @@ textarea.input.grow-text.one-line:focus,textarea.input.grow-text.one-line.err{pa
   .onb3-flow li{padding:10px 6px}
 }
 @media (prefers-reduced-motion:reduce){.onb3-duck{animation:none}.onb3-alert{transform:none}}
+.onb3-btns{display:flex;gap:12px;width:100%}
+.onb3-btns .btn{min-height:52px;font-size:16px}
+.onb3-btns .btn.secondary{flex:none;padding-left:20px;padding-right:20px}
+.onb3-btns .btn.grow{flex:1;min-width:0}
+.onb3-duck-sm{width:60px;height:60px;flex:none;object-fit:contain}
+.onb3-when{white-space:nowrap;font-weight:500}
+@media (max-width:480px){.onb3-duck-sm{width:52px;height:52px}}
