@@ -6,6 +6,8 @@ Run:  pip install -r tests/e2e/requirements.txt && playwright install chromium
 import datetime as dt
 import re
 
+import pytest
+
 from playwright.sync_api import Page, expect
 
 
@@ -471,3 +473,20 @@ def test_language_switch_in_profile(page: Page, base_url, errors):
     page.locator(".profile-btn").click() if page.get_by_role("radiogroup", name="Мова").count() == 0 else None
     page.get_by_role("radiogroup", name="Мова").get_by_role("radio", name="English").click()
     expect(page.get_by_role("link", name="My reminders").first).to_be_visible()
+
+
+def test_closing_the_google_window_stops_waiting_quickly(page: Page, base_url, errors):
+    page.goto(base_url + "/")
+    btn = page.get_by_role("button", name="Continue with Google")
+    expect(btn).to_be_visible()
+    page.wait_for_load_state("networkidle"); page.wait_for_timeout(300)
+    if not page.evaluate("!!(window.RRCloud && RRCloud.enabled)"):
+        pytest.skip("no Firebase on this page")
+    # The Google window never answers (like Firebase's long wait after it is closed).
+    page.evaluate("RRCloud.signInWithGoogle = () => new Promise(() => {}); true")
+    btn.click()
+    expect(page.get_by_role("button", name="Try the demo without signing up")).to_be_disabled()
+    page.wait_for_timeout(600)
+    page.evaluate("window.dispatchEvent(new Event('focus'))")                 # back on the page, window closed
+    expect(page.get_by_role("button", name="Try the demo without signing up")).to_be_enabled(timeout=2500)
+    expect(btn).to_be_enabled()
